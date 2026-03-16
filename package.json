@@ -1,5 +1,5 @@
 {
-  "name": "@wiuvel/socket-bun-engine",
+  "name": "@rvncom/socket-bun-engine",
   "version": "1.0.0",
   "description": "Engine.IO server implementation for Bun runtime",
   "type": "module",

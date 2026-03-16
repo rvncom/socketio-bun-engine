@@ -1,4 +1,4 @@
-# @wiuvel/socket-bun-engine
+# @rvncom/socket-bun-engine
 
 Engine.IO server implementation for the Bun runtime. Provides native WebSocket and HTTP long-polling transports for [Socket.IO](https://socket.io/).
 
