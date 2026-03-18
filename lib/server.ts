@@ -9,7 +9,7 @@ import {
 import { addCorsHeaders, type CorsOptions } from "./cors";
 import { Transport } from "./transport";
 import { generateId } from "./util";
-import type { RawData } from "./parser";
+import { Parser, type RawData } from "./parser";
 import { ServerMetrics, type MetricsSnapshot } from "./metrics";
 import { type RateLimitOptions } from "./rate-limiter";
 import { debuglog } from "node:util";
@@ -58,6 +58,13 @@ export interface ServerOptions {
    * Per-socket message rate limiting. Disabled by default.
    */
   rateLimit?: RateLimitOptions;
+  /**
+   * Enable per-message byte counting metrics. When false, only connection/disconnection
+   * counters are tracked (cheap increments). Per-message byte metrics are activated lazily
+   * on first `server.metrics` access or when set to true.
+   * @default false
+   */
+  enableMetrics?: boolean;
   /**
    * Fraction (0–1) of maxClients at which graceful degradation activates.
    * Requires maxClients > 0. Set to 0 to disable (default).
@@ -144,6 +151,8 @@ export class Server extends EventEmitter<
   private clients: Map<string, Socket> = new Map();
   private _metrics = new ServerMetrics();
   private _degraded = false;
+  private _metricsEnabled = false;
+  private _metricsAttached = new WeakSet<Socket>();
 
   public get clientsCount(): number {
     return this.clients.size;
@@ -151,8 +160,16 @@ export class Server extends EventEmitter<
 
   /**
    * Returns a snapshot of server metrics.
+   * On first access (when enableMetrics is not true), lazily activates
+   * per-message byte counting on all existing sockets.
    */
   public get metrics(): MetricsSnapshot {
+    if (!this._metricsEnabled) {
+      this._metricsEnabled = true;
+      for (const socket of this.clients.values()) {
+        this._attachMetricsListeners(socket);
+      }
+    }
     return this._metrics.snapshot();
   }
 
@@ -172,6 +189,41 @@ export class Server extends EventEmitter<
       },
       opts,
     );
+
+    this._metricsEnabled = this.opts.enableMetrics === true;
+  }
+
+  private _attachMetricsListeners(socket: Socket) {
+    if (this._metricsAttached.has(socket)) return;
+    this._metricsAttached.add(socket);
+
+    socket.on("data", (data) => {
+      this._metrics.onBytesReceived(
+        typeof data === "string"
+          ? data.length
+          : (data as unknown as { byteLength: number }).byteLength,
+      );
+    });
+
+    socket.on("packetCreate", (packet) => {
+      if (packet.data != null) {
+        this._metrics.onBytesSent(
+          typeof packet.data === "string"
+            ? packet.data.length
+            : (packet.data as unknown as { byteLength: number }).byteLength,
+        );
+      }
+    });
+
+    socket.on("heartbeat", () => {
+      if (socket.rtt > 0) {
+        this._metrics.onRtt(socket.rtt);
+      }
+    });
+
+    socket.on("upgrade", () => {
+      this._metrics.onUpgrade();
+    });
   }
 
   /**
@@ -468,33 +520,9 @@ export class Server extends EventEmitter<
     this.clients.set(id, socket);
     this._metrics.onConnection();
 
-    socket.on("data", (data) => {
-      this._metrics.onBytesReceived(
-        typeof data === "string"
-          ? data.length
-          : (data as unknown as { byteLength: number }).byteLength,
-      );
-    });
-
-    socket.on("packetCreate", (packet) => {
-      if (packet.data != null) {
-        this._metrics.onBytesSent(
-          typeof packet.data === "string"
-            ? packet.data.length
-            : (packet.data as unknown as { byteLength: number }).byteLength,
-        );
-      }
-    });
-
-    socket.on("heartbeat", () => {
-      if (socket.rtt > 0) {
-        this._metrics.onRtt(socket.rtt);
-      }
-    });
-
-    socket.on("upgrade", () => {
-      this._metrics.onUpgrade();
-    });
+    if (this._metricsEnabled) {
+      this._attachMetricsListeners(socket);
+    }
 
     socket.once("close", (reason) => {
       debug(`socket ${id} closed due to ${reason}`);
@@ -538,20 +566,34 @@ export class Server extends EventEmitter<
 
   /**
    * Sends a message to all connected sockets.
+   * Encodes the packet once and sends the pre-encoded data to WebSocket transports (zero-copy).
+   * Polling transports fall back to the normal socket.write() path.
    */
   public broadcast(data: RawData): void {
+    const encoded = Parser.encodePacket({ type: "message", data }, true);
     for (const socket of this.clients.values()) {
-      socket.write(data);
+      if (socket.transport.name === "websocket") {
+        (socket.transport as WS).sendRaw(encoded);
+      } else {
+        socket.write(data);
+      }
     }
   }
 
   /**
    * Sends a message to all connected sockets except the one with the given id.
+   * Encodes the packet once and sends the pre-encoded data to WebSocket transports (zero-copy).
+   * Polling transports fall back to the normal socket.write() path.
    */
   public broadcastExcept(excludeId: string, data: RawData): void {
+    const encoded = Parser.encodePacket({ type: "message", data }, true);
     for (const [id, socket] of this.clients) {
       if (id !== excludeId) {
-        socket.write(data);
+        if (socket.transport.name === "websocket") {
+          (socket.transport as WS).sendRaw(encoded);
+        } else {
+          socket.write(data);
+        }
       }
     }
   }

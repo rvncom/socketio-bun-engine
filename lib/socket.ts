@@ -306,6 +306,7 @@ export class Socket extends EventEmitter<
     this.readyState = "closed";
     clearTimeout(this.pingIntervalTimer);
     clearTimeout(this.pingTimeoutTimer);
+    this.rateLimiter?.destroy();
 
     this.closeTransport();
     this.emitReserved("close", reason);
@@ -329,7 +330,7 @@ export class Socket extends EventEmitter<
    * @private
    */
   private sendPacket(type: PacketType, data?: RawData) {
-    if (["closing", "closed"].includes(this.readyState)) {
+    if (this.readyState === "closing" || this.readyState === "closed") {
       return;
     }
 

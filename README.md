@@ -122,6 +122,18 @@ engine.on("connection", (socket) => {
 });
 ```
 
+### `enableMetrics`
+
+Default: `false`
+
+Controls whether per-message byte counting (`bytesReceived`, `bytesSent`, `avgRtt`, `upgrades`) is active from the start. When `false`, these metrics activate lazily on first `server.metrics` access. Connection and disconnection counters are always tracked regardless of this option.
+
+```ts
+const engine = new Engine({
+  enableMetrics: true, // attach byte-counting listeners immediately
+});
+```
+
 ### `degradationThreshold`
 
 Default: `0` (disabled)
@@ -193,7 +205,7 @@ const engine = new Engine({
 
 ## Metrics
 
-Built-in server metrics with zero dependencies:
+Built-in server metrics with zero dependencies. Per-message byte counting is lazy by default — counters activate on first `server.metrics` access (or immediately with `enableMetrics: true`). Connection/disconnection counters are always active.
 
 ```ts
 const snapshot = engine.metrics;
@@ -239,11 +251,11 @@ Look up a specific socket by session ID.
 
 ### `server.broadcast(data)`
 
-Sends a message to all connected sockets.
+Sends a message to all connected sockets. The packet is encoded once and sent as pre-encoded data to WebSocket transports (zero-copy). Polling transports fall back to the normal path.
 
 ### `server.broadcastExcept(excludeId, data)`
 
-Sends a message to all connected sockets except the one with the given id.
+Sends a message to all connected sockets except the one with the given id. Same zero-copy optimization as `broadcast()`.
 
 ### `server.degraded`
 

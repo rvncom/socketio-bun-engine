@@ -199,6 +199,12 @@ abstract class BaseEventEmitter<
 
     if (listeners.length === 1) {
       listeners[0]!.apply(this, args);
+    } else if (listeners.length === 2) {
+      // Snapshot both refs before calling — a `once` listener may mutate the array
+      const a = listeners[0]!;
+      const b = listeners[1]!;
+      a.apply(this, args);
+      b.apply(this, args);
     } else {
       for (const listener of listeners.slice()) {
         listener.apply(this, args);

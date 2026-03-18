@@ -57,7 +57,7 @@ export abstract class Transport extends EventEmitter<
    * Manually closes the transport.
    */
   public close() {
-    if (["closing", "closed"].includes(this.readyState)) {
+    if (this.readyState === "closing" || this.readyState === "closed") {
       return;
     }
 

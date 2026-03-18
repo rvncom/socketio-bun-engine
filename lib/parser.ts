@@ -17,23 +17,26 @@ export interface Packet {
   data?: RawData;
 }
 
-const PACKET_TYPES = new Map<PacketType, string>();
-const PACKET_TYPES_REVERSE = new Map<string, PacketType>();
+// Plain objects for JIT inline-cache friendly lookups
+const PACKET_TYPES: Record<string, string> = {
+  open: "0",
+  close: "1",
+  ping: "2",
+  pong: "3",
+  message: "4",
+  upgrade: "5",
+  noop: "6",
+};
 
-(
-  [
-    "open",
-    "close",
-    "ping",
-    "pong",
-    "message",
-    "upgrade",
-    "noop",
-  ] as PacketType[]
-).forEach((type, index) => {
-  PACKET_TYPES.set(type, "" + index);
-  PACKET_TYPES_REVERSE.set("" + index, type);
-});
+const PACKET_TYPES_REVERSE: Record<string, PacketType> = {
+  "0": "open",
+  "1": "close",
+  "2": "ping",
+  "3": "pong",
+  "4": "message",
+  "5": "upgrade",
+  "6": "noop",
+};
 
 const ERROR_PACKET: Packet = { type: "error", data: "parser error" };
 
@@ -41,9 +44,12 @@ export const Parser = {
   encodePacket({ type, data }: Packet, supportsBinary: boolean): RawData {
     if (Buffer.isBuffer(data)) {
       return supportsBinary ? data : "b" + data.toString("base64");
-    } else {
-      return PACKET_TYPES.get(type) + (data || "");
     }
+    // Fast path: message type is 95%+ of traffic
+    if (type === "message") {
+      return "4" + (data || "");
+    }
+    return PACKET_TYPES[type] + (data || "");
   },
 
   decodePacket(encodedPacket: RawData): Packet {
@@ -54,6 +60,12 @@ export const Parser = {
       };
     }
     const typeChar = encodedPacket.charAt(0);
+    // Fast path: message type "4" is 95%+ of traffic
+    if (typeChar === "4") {
+      return encodedPacket.length > 1
+        ? { type: "message", data: encodedPacket.substring(1) }
+        : { type: "message" };
+    }
     if (typeChar === "b") {
       const buffer = Buffer.from(encodedPacket.substring(1), "base64");
       return {
@@ -61,10 +73,10 @@ export const Parser = {
         data: buffer,
       };
     }
-    if (!PACKET_TYPES_REVERSE.has(typeChar)) {
+    const type = PACKET_TYPES_REVERSE[typeChar];
+    if (type === undefined) {
       return ERROR_PACKET;
     }
-    const type = PACKET_TYPES_REVERSE.get(typeChar)!;
     return encodedPacket.length > 1
       ? {
           type,

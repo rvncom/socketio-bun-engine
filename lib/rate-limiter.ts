@@ -10,32 +10,37 @@ export interface RateLimitOptions {
 }
 
 /**
- * Simple token bucket rate limiter — no timers, lazy window reset.
+ * Timer-based rate limiter — no Date.now() on the hot path.
+ * A periodic timer resets the token counter every windowMs.
  */
 export class RateLimiter {
   private remaining: number;
-  private windowStart: number;
   private readonly opts: RateLimitOptions;
+  private timer: Timer;
 
   constructor(opts: RateLimitOptions) {
     this.opts = opts;
     this.remaining = opts.maxMessages;
-    this.windowStart = Date.now();
+    this.timer = setInterval(() => {
+      this.remaining = this.opts.maxMessages;
+    }, opts.windowMs);
   }
 
   /**
    * Attempt to consume one token. Returns `true` if allowed, `false` if rate limited.
    */
   consume(): boolean {
-    const now = Date.now();
-    if (now - this.windowStart >= this.opts.windowMs) {
-      this.windowStart = now;
-      this.remaining = this.opts.maxMessages;
-    }
     if (this.remaining <= 0) {
       return false;
     }
     this.remaining--;
     return true;
+  }
+
+  /**
+   * Clears the internal reset timer. Call on socket close.
+   */
+  destroy() {
+    clearInterval(this.timer);
   }
 }

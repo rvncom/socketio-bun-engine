@@ -1,5 +1,22 @@
 # Changelog
 
+## 1.0.4
+
+### Performance
+
+- **Lazy metrics activation**: Per-message byte counting listeners are no longer attached to every socket unconditionally. Set `enableMetrics: true` or access `server.metrics` to activate. Connection/disconnection counters remain always-on (cheap increments). Eliminates extra event listeners and `listeners.slice()` copies on every incoming message.
+- **Rate limiter: timer-based window**: Replaced `Date.now()` call on every message with a periodic `setInterval` reset. `consume()` is now a simple decrement + comparison. Added `destroy()` to clean up timer on socket close.
+- **Backpressure check cache**: `getBufferedAmount()` native call is skipped entirely when `backpressureThreshold` is 0 (disabled). Cached boolean avoids repeated threshold comparison.
+- **EventEmitter 2-listener fast path**: `emit()` now directly calls both listeners when exactly 2 are registered, avoiding `listeners.slice()` array copy. Only falls back to slice for 3+ listeners.
+- **Parser fast paths**: Replaced `Map` lookups with plain objects (JIT inline-cache friendly). Added dedicated fast paths for message type (`"4"`) in both `encodePacket()` and `decodePacket()` — covers 95%+ of traffic.
+- **Micro-optimizations**: Replaced `["closing", "closed"].includes(readyState)` with direct `===` comparisons in `Socket.sendPacket()` and `Transport.close()` — eliminates temporary array allocation and linear search.
+- **Zero-copy broadcast**: `broadcast()` and `broadcastExcept()` now encode the packet once with `Parser.encodePacket()` and send the pre-encoded data directly to WebSocket transports via `WS.sendRaw()`. Polling transports fall back to the normal `socket.write()` path.
+
+### New Features
+
+- **`enableMetrics` option**: `ServerOptions.enableMetrics` (default `false`) controls whether per-message byte counting is active from the start. When false, metrics activate lazily on first `server.metrics` access.
+- **`WS.sendRaw()`**: New method on WebSocket transport for sending pre-encoded data, bypassing packet creation and event emission.
+
 ## 1.0.3
 
 ### Bug Fixes

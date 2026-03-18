@@ -1,7 +1,17 @@
 {
   "name": "@rvncom/socket-bun-engine",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "description": "Engine.IO server implementation for Bun runtime",
+  "keywords": [
+    "socket",
+    "socket.io",
+    "engine.io",
+    "bun",
+    "websocket",
+    "realtime",
+    "transport",
+    "long-polling"
+  ],
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
