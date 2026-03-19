@@ -1,6 +1,7 @@
 import { EventEmitter } from "./event-emitter";
 import { type Packet, type PacketType, type RawData } from "./parser";
 import { Transport, TransportError } from "./transport";
+import { WS } from "./transports/websocket";
 import { type ServerOptions } from "./server";
 import { RateLimiter } from "./rate-limiter";
 import { debuglog } from "node:util";
@@ -45,6 +46,9 @@ interface SocketEvents {
 
 const FAST_UPGRADE_INTERVAL_MS = 100;
 
+// Pre-encoded ping packet: Parser.encodePacket({ type: "ping" }, true) === "2"
+const ENCODED_PING = "2";
+
 export class Socket extends EventEmitter<
   Record<never, never>,
   Record<never, never>,
@@ -66,6 +70,8 @@ export class Socket extends EventEmitter<
   private _pingSentAt = 0;
   private rateLimiter?: RateLimiter;
   public rtt = 0;
+  /** Set to true when packetCreate listeners are attached (e.g. metrics). */
+  public _hasPacketCreateListener = false;
 
   constructor(
     id: string,
@@ -98,15 +104,26 @@ export class Socket extends EventEmitter<
   private onOpen() {
     this.readyState = "open";
 
+    const upgrades = this.transport.upgradesTo;
+    const upgradesStr =
+      upgrades.length === 0
+        ? "[]"
+        : upgrades.length === 1
+          ? '["' + upgrades[0] + '"]'
+          : JSON.stringify(upgrades);
     this.sendPacket(
       "open",
-      JSON.stringify({
-        sid: this.id,
-        upgrades: this.transport.upgradesTo,
-        pingInterval: this.opts.pingInterval,
-        pingTimeout: this.opts.pingTimeout,
-        maxPayload: this.opts.maxHttpBufferSize,
-      }),
+      '{"sid":"' +
+        this.id +
+        '","upgrades":' +
+        upgradesStr +
+        ',"pingInterval":' +
+        this.opts.pingInterval +
+        ',"pingTimeout":' +
+        this.opts.pingTimeout +
+        ',"maxPayload":' +
+        this.opts.maxHttpBufferSize +
+        "}",
     );
 
     this.emitReserved("open");
@@ -187,7 +204,12 @@ export class Socket extends EventEmitter<
         `writing ping packet - expecting pong within ${this.opts.pingTimeout} ms`,
       );
       this._pingSentAt = Date.now();
-      this.sendPacket("ping");
+      // Fast path: send pre-encoded ping directly on WS transport
+      if (this.transport instanceof WS && this.transport.writable) {
+        this.transport.sendRaw(ENCODED_PING);
+      } else {
+        this.sendPacket("ping");
+      }
       this.resetPingTimeout();
     }, this.opts.pingInterval);
   }
@@ -216,6 +238,19 @@ export class Socket extends EventEmitter<
     this.transport.on("packet", (packet) => this.onPacket(packet));
     this.transport.on("drain", () => this.flush());
     this.transport.on("close", () => this.onClose("transport close"));
+
+    // Wire fast-path callback for WS message packets
+    if (transport instanceof WS) {
+      transport._onMessageFast = (data) => {
+        if (this.readyState !== "open") return;
+        if (this.rateLimiter && !this.rateLimiter.consume()) {
+          debug("message dropped: rate limited");
+          this.emitReserved("rateLimited");
+          return;
+        }
+        this.emitReserved("data", data!);
+      };
+    }
   }
 
   /**
@@ -318,6 +353,19 @@ export class Socket extends EventEmitter<
    * @param data
    */
   public write(data: RawData): Socket {
+    if (this.readyState === "closing" || this.readyState === "closed") {
+      return this;
+    }
+    // Fast path: direct send when transport is writable, buffer is empty, and no packetCreate listeners
+    if (
+      !this._hasPacketCreateListener &&
+      this.transport.writable &&
+      this.writeBuffer.length === 0 &&
+      this.transport instanceof WS
+    ) {
+      this.transport.sendMessage(data);
+      return this;
+    }
     this.sendPacket("message", data);
     return this;
   }
@@ -341,7 +389,9 @@ export class Socket extends EventEmitter<
       data,
     };
 
-    this.emitReserved("packetCreate", packet);
+    if (this._hasPacketCreateListener) {
+      this.emitReserved("packetCreate", packet);
+    }
 
     this.writeBuffer.push(packet);
 

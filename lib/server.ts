@@ -59,6 +59,17 @@ export interface ServerOptions {
    */
   rateLimit?: RateLimitOptions;
   /**
+   * Enable WebSocket per-message deflate compression (RFC 7692).
+   * Pass `true` for defaults or an object with `compress`/`decompress` options.
+   * @default false
+   */
+  perMessageDeflate?:
+    | boolean
+    | {
+        compress?: Bun.WebSocketCompressor | boolean;
+        decompress?: Bun.WebSocketCompressor | boolean;
+      };
+  /**
    * Enable per-message byte counting metrics. When false, only connection/disconnection
    * counters are tracked (cheap increments). Per-message byte metrics are activated lazily
    * on first `server.metrics` access or when set to true.
@@ -121,6 +132,7 @@ interface ServerReservedEvents {
   ) => void;
   connection_error: (err: ConnectionError) => void;
   degradation: (event: DegradationEvent) => void;
+  shutdown: () => void;
 }
 
 const enum ERROR_CODES {
@@ -151,11 +163,16 @@ export class Server extends EventEmitter<
   private clients: Map<string, Socket> = new Map();
   private _metrics = new ServerMetrics();
   private _degraded = false;
+  private _draining = false;
   private _metricsEnabled = false;
   private _metricsAttached = new WeakSet<Socket>();
 
   public get clientsCount(): number {
     return this.clients.size;
+  }
+
+  public get draining(): boolean {
+    return this._draining;
   }
 
   /**
@@ -196,12 +213,15 @@ export class Server extends EventEmitter<
   private _attachMetricsListeners(socket: Socket) {
     if (this._metricsAttached.has(socket)) return;
     this._metricsAttached.add(socket);
+    socket._hasPacketCreateListener = true;
 
     socket.on("data", (data) => {
       this._metrics.onBytesReceived(
         typeof data === "string"
           ? data.length
-          : (data as unknown as { byteLength: number }).byteLength,
+          : Buffer.isBuffer(data)
+            ? data.byteLength
+            : 0,
       );
     });
 
@@ -210,7 +230,9 @@ export class Server extends EventEmitter<
         this._metrics.onBytesSent(
           typeof packet.data === "string"
             ? packet.data.length
-            : (packet.data as unknown as { byteLength: number }).byteLength,
+            : Buffer.isBuffer(packet.data)
+              ? packet.data.byteLength
+              : 0,
         );
       }
     });
@@ -435,6 +457,17 @@ export class Server extends EventEmitter<
     url: URL,
     responseHeaders: Headers,
   ): Promise<Response> {
+    if (this._draining) {
+      responseHeaders.set("Content-Type", "application/json");
+      return new Response(
+        JSON.stringify({
+          code: ERROR_CODES.FORBIDDEN,
+          message: "Server shutting down",
+        }),
+        { status: 503, headers: responseHeaders },
+      );
+    }
+
     if (this.opts.maxClients > 0 && this.clients.size >= this.opts.maxClients) {
       this.emitReserved("connection_error", {
         req,
@@ -508,14 +541,20 @@ export class Server extends EventEmitter<
       ? { ...this.opts, pingInterval: this.opts.pingInterval * 2 }
       : this.opts;
 
-    const socket = new Socket(id, socketOpts, transport, {
+    const request: import("./socket").HandshakeRequestReference = {
       url: req.url,
-      headers: Object.fromEntries(req.headers.entries()),
       _query: Object.fromEntries(url.searchParams.entries()),
       connection: {
-        encrypted: ["https", "wss"].includes(url.protocol),
+        encrypted: url.protocol === "https:" || url.protocol === "wss:",
       },
-    });
+      get headers() {
+        const h = Object.fromEntries(req.headers.entries());
+        Object.defineProperty(this, "headers", { value: h });
+        return h;
+      },
+    };
+
+    const socket = new Socket(id, socketOpts, transport, request);
 
     this.clients.set(id, socket);
     this._metrics.onConnection();
@@ -615,6 +654,46 @@ export class Server extends EventEmitter<
   }
 
   /**
+   * Gracefully shuts down the server: stops accepting new connections,
+   * closes all existing clients, and resolves when done or on timeout.
+   */
+  public shutdown(opts?: { timeout?: number }): Promise<void> {
+    this._draining = true;
+    const timeout = opts?.timeout ?? 10000;
+
+    return new Promise<void>((resolve) => {
+      if (this.clients.size === 0) {
+        this.emitReserved("shutdown");
+        resolve();
+        return;
+      }
+
+      const timer = setTimeout(() => {
+        // Force-close any remaining clients
+        this.clients.forEach((client) => {
+          client.close();
+        });
+        this.emitReserved("shutdown");
+        resolve();
+      }, timeout);
+
+      let remaining = this.clients.size;
+      const onClose = () => {
+        if (--remaining === 0) {
+          clearTimeout(timer);
+          this.emitReserved("shutdown");
+          resolve();
+        }
+      };
+
+      this.clients.forEach((client) => {
+        client.once("close", onClose);
+        client.close();
+      });
+    });
+  }
+
+  /**
    * Closes all clients and returns a Promise that resolves when all are closed.
    */
   public close(): Promise<void> {
@@ -693,6 +772,7 @@ export class Server extends EventEmitter<
           this.onWebSocketClose(ws, code, message);
         },
         maxPayloadLength: this.opts.maxHttpBufferSize,
+        perMessageDeflate: this.opts.perMessageDeflate ?? false,
       },
 
       idleTimeout: idleTimeoutInSeconds,

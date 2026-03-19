@@ -14,6 +14,12 @@ export class WS extends Transport {
   private socket?: BunWebSocket;
   private readonly _checkBackpressure: boolean;
 
+  /**
+   * Fast-path callback for message packets (type "4").
+   * Set by Socket.bindTransport() to bypass the full event chain.
+   */
+  public _onMessageFast?: (data: RawData | undefined) => void;
+
   constructor(opts: import("../server").ServerOptions) {
     super(opts);
     this._checkBackpressure = opts.backpressureThreshold > 0;
@@ -55,6 +61,33 @@ export class WS extends Transport {
       debug("backpressure: buffer full after send, pausing writes");
       this.writable = false;
     }
+  }
+
+  /**
+   * Sends a message directly — encodes inline as "4" + data.
+   * Bypasses Packet allocation, writeBuffer, flush, and event emission.
+   * Returns true if sent, false otherwise.
+   */
+  public sendMessage(data: RawData): boolean {
+    if (
+      !this.writable ||
+      !this.socket ||
+      this.socket.readyState !== WebSocket.OPEN
+    ) {
+      return false;
+    }
+
+    this.socket.send(typeof data === "string" ? "4" + data : data);
+
+    if (
+      this._checkBackpressure &&
+      this.socket.getBufferedAmount() > this.opts.backpressureThreshold
+    ) {
+      debug("backpressure: buffer full after sendMessage, pausing writes");
+      this.writable = false;
+    }
+
+    return true;
   }
 
   /**
@@ -104,6 +137,18 @@ export class WS extends Transport {
       debug("backpressure: buffer drained, resuming writes");
       this.writable = true;
       this.emitReserved("drain");
+    }
+
+    // Fast path: string message starting with "4" (message type) — skip full decode/event chain
+    if (
+      this._onMessageFast &&
+      typeof message === "string" &&
+      message.charCodeAt(0) === 52
+    ) {
+      this._onMessageFast(
+        message.length > 1 ? message.substring(1) : undefined,
+      );
+      return;
     }
 
     this.onPacket(Parser.decodePacket(message));

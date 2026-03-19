@@ -122,6 +122,18 @@ engine.on("connection", (socket) => {
 });
 ```
 
+### `perMessageDeflate`
+
+Default: `false`
+
+Enable WebSocket per-message deflate compression (RFC 7692). Pass `true` for defaults or a `Bun.WebSocketPerMessageDeflateOptions` object for fine-grained control. Provides 50-70% bandwidth savings for text-heavy payloads.
+
+```ts
+const engine = new Engine({
+  perMessageDeflate: true,
+});
+```
+
 ### `enableMetrics`
 
 Default: `false`
@@ -260,6 +272,25 @@ Sends a message to all connected sockets except the one with the given id. Same 
 ### `server.degraded`
 
 Returns `true` if the server is currently in degraded mode.
+
+### `server.shutdown(opts?)`
+
+Gracefully shuts down the server. Stops accepting new connections (returns 503), sends close to all existing clients, and resolves when all are disconnected or after the timeout.
+
+```ts
+await engine.shutdown({ timeout: 10000 }); // default: 10s
+
+engine.on("shutdown", () => {
+  console.log("Server shut down");
+});
+```
+
+Options:
+- `timeout` (default: `10000`): Maximum time in milliseconds to wait for clients to disconnect before force-closing.
+
+### `server.draining`
+
+Returns `true` after `shutdown()` has been called.
 
 ### `server.close()`
 

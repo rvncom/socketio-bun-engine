@@ -1,5 +1,29 @@
 # Changelog
 
+## 1.0.5
+
+### New Features
+
+- **WebSocket compression (`perMessageDeflate`)**: Pass `perMessageDeflate: true` (or a `Bun.WebSocketPerMessageDeflateOptions` object) to enable RFC 7692 per-message deflate compression. Default: `false` (no change in behavior).
+- **Graceful shutdown (`server.shutdown()`)**: Stops accepting new connections (returns 503), closes all existing clients, and resolves when all are disconnected or after a configurable timeout. Emits `'shutdown'` event when done.
+- **`server.draining` getter**: Returns `true` after `shutdown()` has been called.
+
+### Code Quality
+
+- **Fix `as unknown` type assertions**: Replaced unsafe `(data as unknown as { byteLength: number }).byteLength` in metrics listeners with proper `Buffer.isBuffer()` checks.
+
+### Performance
+
+- **Fast ID generation**: Replaced `randomBytes(15).toString("base64url")` (sync crypto) with Bun-native `crypto.randomUUID()` for faster handshakes.
+- **Inline handshake JSON**: Replaced `JSON.stringify()` in the open packet with string concatenation — eliminates object serialization on every new connection.
+- **Lazy header serialization**: `request.headers` in the handshake is now a lazy getter — `Object.fromEntries(req.headers.entries())` only runs when the property is actually accessed.
+- **Protocol check optimization**: Replaced `["https", "wss"].includes(url.protocol)` with direct `===` comparisons (URL.protocol includes the colon).
+- **Fast message callback**: WebSocket message type `"4"` (95%+ of traffic) now bypasses the full `Parser.decodePacket()` → `Transport.onPacket()` → `emitReserved("packet")` → `Socket.onPacket()` chain via a direct callback on the transport.
+- **Skip packetCreate emission**: `emitReserved("packetCreate")` is skipped entirely when no metrics listeners are attached, eliminating a no-op event dispatch on every outgoing packet.
+- **Direct write path**: `socket.write(data)` on WebSocket transports now sends directly via `WS.sendMessage()` when the buffer is empty and no packetCreate listeners exist — skips Packet object allocation, writeBuffer push/swap, flush, and drain events.
+- **Pre-encoded ping**: Ping packets on WebSocket transports use a pre-encoded `"2"` string sent via `sendRaw()`, bypassing packet creation and event emission.
+- **`WS.sendMessage()`**: New method on WebSocket transport for direct message sending — encodes inline as `"4" + data`, returns success boolean.
+
 ## 1.0.4
 
 ### Performance
