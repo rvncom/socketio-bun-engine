@@ -1,5 +1,22 @@
 # Changelog
 
+## 1.0.7
+
+### Bug Fixes
+
+- **Fix write buffer loss during upgrade**: Swapped `closeTransport()` / `bindTransport()` order in upgrade completion — new WS transport is now bound before closing the old polling transport, preventing message loss if an error occurs mid-switch.
+- **Fix upgrade timeout timer leak**: The upgrade `timeoutId` is now cleared in the transport `close` handler. Previously, if the transport closed before upgrade completed (e.g. client disconnected), the timeout timer would fire on a dead transport.
+- **Guard `req.text()` in polling**: Wrapped `await req.text()` in a try-catch in `onDataRequest()`. If the client aborts mid-body, the transport now emits an error and returns 400 instead of leaving the polling promise in a broken state.
+
+### Performance
+
+- **Cork single-packet sends**: `WS.send()` now always uses `socket.cork()`, including for single-packet sends. Previously only batches of 2+ were corked — single sends incurred an extra write+flush syscall.
+- **Cache degradation state**: Merged `isDegraded()` computation into `updateDegradationState()`, called only on connect/disconnect. `handshake()` now reads the cached `_degraded` flag directly instead of recomputing the ratio on every request.
+
+### New Features
+
+- **Per-socket metrics**: `socket.bytesSent`, `socket.bytesReceived`, `socket.messagesSent`, `socket.messagesReceived`, `socket.connectedAt` — lightweight counters on each socket for identifying bandwidth-heavy or slow clients. Zero overhead when not read.
+
 ## 1.0.6
 
 ### Performance

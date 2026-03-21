@@ -93,7 +93,13 @@ export class Polling extends Transport {
       return new Response(null, { status: 413, headers: responseHeaders });
     }
 
-    const data = await req.text();
+    let data: string;
+    try {
+      data = await req.text();
+    } catch {
+      this.onError("data request connection lost");
+      return new Response(null, { status: 400, headers: responseHeaders });
+    }
 
     if (data.length > this.opts.maxHttpBufferSize) {
       this.onError("payload too large");

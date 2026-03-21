@@ -296,6 +296,32 @@ Returns `true` after `shutdown()` has been called.
 
 Returns a `Promise<void>` that resolves when all clients have disconnected.
 
+### `socket.bytesSent` / `socket.bytesReceived`
+
+Cumulative byte counters for this socket's message traffic. Counts payload bytes only (excludes protocol framing).
+
+### `socket.messagesSent` / `socket.messagesReceived`
+
+Cumulative message counters for this socket.
+
+### `socket.connectedAt`
+
+Timestamp (`Date.now()`) of when the socket was created. Useful for computing session duration:
+
+```ts
+engine.on("connection", (socket) => {
+  socket.on("close", () => {
+    const duration = Date.now() - socket.connectedAt;
+    console.log(`Socket ${socket.id}: ${socket.messagesSent} sent, ${socket.bytesReceived} bytes recv, ${duration}ms`);
+  });
+});
+```
+
+## Benchmarks
+
+<!-- BENCH:START -->
+<!-- BENCH:END -->
+
 ## License
 
 [MIT](/LICENSE)

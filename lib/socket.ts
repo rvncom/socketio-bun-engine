@@ -75,6 +75,13 @@ export class Socket extends EventEmitter<
   /** Cached WS transport reference — avoids instanceof check on every write(). */
   private _wsTransport: WS | null = null;
 
+  // Per-socket metrics
+  public bytesSent = 0;
+  public bytesReceived = 0;
+  public messagesSent = 0;
+  public messagesReceived = 0;
+  public readonly connectedAt = Date.now();
+
   constructor(
     id: string,
     opts: ServerOptions,
@@ -169,6 +176,13 @@ export class Socket extends EventEmitter<
           this.emitReserved("rateLimited");
           break;
         }
+        this.messagesReceived++;
+        if (packet.data != null) {
+          this.bytesReceived +=
+            typeof packet.data === "string"
+              ? packet.data.length
+              : (packet.data as Buffer).byteLength;
+        }
         this.emitReserved("data", packet.data!);
         break;
 
@@ -251,6 +265,13 @@ export class Socket extends EventEmitter<
           this.emitReserved("rateLimited");
           return;
         }
+        this.messagesReceived++;
+        if (data != null) {
+          this.bytesReceived +=
+            typeof data === "string"
+              ? data.length
+              : (data as Buffer).byteLength;
+        }
         this.emitReserved("data", data!);
       };
     }
@@ -282,6 +303,7 @@ export class Socket extends EventEmitter<
     let fastUpgradeTimerId: NodeJS.Timeout | undefined;
 
     transport.on("close", () => {
+      clearTimeout(timeoutId);
       clearInterval(fastUpgradeTimerId);
       transport.off();
     });
@@ -314,9 +336,13 @@ export class Socket extends EventEmitter<
 
         clearTimeout(timeoutId);
         clearInterval(fastUpgradeTimerId);
+
+        // Bind new transport before closing old to prevent buffer loss
+        const oldTransport = this.transport;
         transport.off();
-        this.closeTransport();
         this.bindTransport(transport);
+        oldTransport.off();
+        oldTransport.close();
 
         this.emitReserved("upgrade", transport);
         this.flush();
@@ -367,7 +393,14 @@ export class Socket extends EventEmitter<
       wst.writable &&
       this.writeBuffer.length === 0
     ) {
-      if (wst.sendMessage(data)) return this;
+      if (wst.sendMessage(data)) {
+        this.messagesSent++;
+        this.bytesSent +=
+          typeof data === "string"
+            ? data.length
+            : (data as Buffer).byteLength;
+        return this;
+      }
       // sendMessage returned false (e.g. socket closed mid-send) — fall through to buffered path
     }
     this.sendPacket("message", data);
@@ -387,6 +420,16 @@ export class Socket extends EventEmitter<
     }
 
     debug(`sending packet ${type} (${data})`);
+
+    if (type === "message") {
+      this.messagesSent++;
+      if (data != null) {
+        this.bytesSent +=
+          typeof data === "string"
+            ? data.length
+            : (data as Buffer).byteLength;
+      }
+    }
 
     const packet: Packet = {
       type,

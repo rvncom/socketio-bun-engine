@@ -489,9 +489,7 @@ export class Server extends EventEmitter<
 
     const id = generateId();
 
-    // Graceful degradation check
-    const degraded = this.isDegraded();
-    this.updateDegradationState(degraded);
+    // Graceful degradation: use cached flag (updated on connect/disconnect)
 
     if (this.opts.editHandshakeHeaders) {
       await this.opts.editHandshakeHeaders(responseHeaders, req, server);
@@ -500,7 +498,7 @@ export class Server extends EventEmitter<
     let isUpgrade = req.headers.has("upgrade");
 
     // Under degradation, reject new polling connections (WebSocket only)
-    if (degraded && !isUpgrade) {
+    if (this._degraded && !isUpgrade) {
       this.emitReserved("connection_error", {
         req,
         code: ERROR_CODES.FORBIDDEN,
@@ -537,7 +535,7 @@ export class Server extends EventEmitter<
 
     debug(`new socket ${id}`);
 
-    const socketOpts = degraded
+    const socketOpts = this._degraded
       ? { ...this.opts, pingInterval: this.opts.pingInterval * 2 }
       : this.opts;
 
@@ -558,6 +556,7 @@ export class Server extends EventEmitter<
 
     this.clients.set(id, socket);
     this._metrics.onConnection();
+    this.updateDegradationState();
 
     if (this._metricsEnabled) {
       this._attachMetricsListeners(socket);
@@ -567,7 +566,7 @@ export class Server extends EventEmitter<
       debug(`socket ${id} closed due to ${reason}`);
       this.clients.delete(id);
       this._metrics.onDisconnection();
-      this.updateDegradationState(this.isDegraded());
+      this.updateDegradationState();
     });
 
     if (isUpgrade) {
@@ -637,13 +636,10 @@ export class Server extends EventEmitter<
     }
   }
 
-  private isDegraded(): boolean {
+  private updateDegradationState() {
     const { degradationThreshold, maxClients } = this.opts;
-    if (degradationThreshold <= 0 || maxClients <= 0) return false;
-    return this.clients.size / maxClients >= degradationThreshold;
-  }
-
-  private updateDegradationState(degraded: boolean) {
+    if (degradationThreshold <= 0 || maxClients <= 0) return;
+    const degraded = this.clients.size / maxClients >= degradationThreshold;
     if (degraded !== this._degraded) {
       this._degraded = degraded;
       this.emitReserved("degradation", {

@@ -58,16 +58,11 @@ export class WS extends Transport {
       return;
     }
 
-    if (packets.length === 1) {
-      this.socket.send(Parser.encodePacket(packets[0]!, true));
-    } else {
-      // Batch multiple packets into a single syscall via cork()
-      this.socket.cork(() => {
-        for (const packet of packets) {
-          this.socket!.send(Parser.encodePacket(packet, true));
-        }
-      });
-    }
+    this.socket.cork(() => {
+      for (const packet of packets) {
+        this.socket!.send(Parser.encodePacket(packet, true));
+      }
+    });
 
     this._checkAndApplyBackpressure();
   }

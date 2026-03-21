@@ -1,0 +1,175 @@
+name: Benchmark
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      skip_npm_wait:
+        description: 'Skip waiting for npm publish (use current npm version)'
+        type: boolean
+        default: false
+
+jobs:
+  benchmark:
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout engine repo
+        uses: actions/checkout@v6
+        with:
+          path: engine
+          token: ${{ secrets.BENCH_REPO_PAT }}
+
+      - name: Extract version from tag
+        id: version
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            # For manual runs, read version from package.json
+            VERSION=$(node -e "console.log(require('./engine/package.json').version)")
+            TAG="v$VERSION"
+          else
+            TAG="${GITHUB_REF#refs/tags/}"
+            VERSION="${TAG#v}"
+          fi
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "Version: $VERSION (tag: $TAG)"
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+
+      - run: npm install -g pnpm@latest
+
+      - name: Wait for npm package
+        if: ${{ github.event_name != 'workflow_dispatch' || !inputs.skip_npm_wait }}
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          echo "Waiting for @rvncom/socket-bun-engine@$VERSION on npm..."
+          for i in $(seq 1 30); do
+            PUBLISHED=$(npm view "@rvncom/socket-bun-engine@$VERSION" version 2>/dev/null || echo "")
+            if [ "$PUBLISHED" = "$VERSION" ]; then
+              echo "Found version $VERSION on npm"
+              exit 0
+            fi
+            echo "Attempt $i/30: not yet available, waiting 10s..."
+            sleep 10
+          done
+          echo "ERROR: Version $VERSION not found on npm after 5 minutes"
+          exit 1
+
+      - name: Checkout bench repo
+        uses: actions/checkout@v6
+        with:
+          repository: rvncom/socket-engine-bun-bench
+          path: bench
+          token: ${{ secrets.BENCH_REPO_PAT }}
+          fetch-depth: 0
+
+      - name: Install bench dependencies
+        working-directory: bench
+        run: |
+          pnpm install
+          INSTALLED=$(node -e "const p = require('./packages/server-bun-native/node_modules/@rvncom/socket-bun-engine/package.json'); console.log(p.version)")
+          echo "Installed @rvncom/socket-bun-engine: $INSTALLED"
+
+      - name: Run benchmarks
+        working-directory: bench
+        run: |
+          pnpm run bench 2>&1 | tee bench-output.txt
+          grep "^Results-JSON:" bench-output.txt | sed 's/^Results-JSON: //' > results.json
+          echo "Results JSON size: $(wc -c < results.json) bytes"
+        env:
+          WORKERS: 2
+          CONNECTIONS: 1000
+          CLIENTS: 100
+          MESSAGES: 500
+          SAMPLES: 50
+
+      - name: Extract relative metrics
+        working-directory: bench
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          REPORT_URL="https://rvncom.github.io/socket-engine-bun-bench/reports/report-v${VERSION}.html"
+          node scripts/extract-relative.mjs \
+            --input results.json \
+            --version "$VERSION" \
+            --report-url "$REPORT_URL" \
+            --output-markdown readme-snippet.md \
+            --output-json relative-metrics.json
+
+      - name: Locate HTML report
+        id: report
+        working-directory: bench
+        run: |
+          REPORT=$(ls -t results/report-*.html | head -1)
+          echo "path=$REPORT" >> "$GITHUB_OUTPUT"
+          echo "Report: $REPORT"
+
+      - name: Publish report to GitHub Pages
+        working-directory: bench
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          REPORT="${{ steps.report.outputs.path }}"
+
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          # Save files before branch switch
+          cp "$REPORT" /tmp/report.html
+          cp relative-metrics.json /tmp/relative-metrics.json
+
+          # Create or switch to gh-pages
+          git fetch origin gh-pages:gh-pages 2>/dev/null && git checkout gh-pages || {
+            git checkout --orphan gh-pages
+            git rm -rf . 2>/dev/null || true
+          }
+
+          mkdir -p reports
+          cp /tmp/report.html "reports/report-v${VERSION}.html"
+          cp /tmp/report.html "reports/report-latest.html"
+          cp /tmp/relative-metrics.json "reports/metrics-v${VERSION}.json"
+          cp /tmp/relative-metrics.json "reports/metrics-latest.json"
+
+          # Index page redirects to latest report
+          cat > index.html << 'EOF'
+          <!DOCTYPE html>
+          <html><head><meta http-equiv="refresh" content="0;url=reports/report-latest.html"></head></html>
+          EOF
+
+          git add -A
+          git commit -m "bench: add report for v${VERSION}" || echo "No changes to commit"
+          git push origin gh-pages
+
+      - name: Update engine README
+        working-directory: engine
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          SNIPPET=$(cat ../bench/readme-snippet.md)
+
+          # Add markers if missing (before ## License)
+          if ! grep -q "<!-- BENCH:START -->" README.md; then
+            sed -i '/^## License$/i\\n## Benchmarks\n\n<!-- BENCH:START -->\n<!-- BENCH:END -->\n' README.md
+          fi
+
+          # Replace content between markers using awk
+          awk -v snippet="$SNIPPET" '
+            /<!-- BENCH:START -->/ { print; printf "%s\n", snippet; skip=1; next }
+            /<!-- BENCH:END -->/ { skip=0 }
+            !skip { print }
+          ' README.md > README.tmp && mv README.tmp README.md
+
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add README.md
+          git diff --cached --quiet || git commit -m "bench: update benchmarks for v${VERSION}"
+          git push origin HEAD:main
