@@ -133,6 +133,11 @@ jobs:
             git checkout --orphan gh-pages
             git rm -rf . 2>/dev/null || true
           }
+          
+          # Force clean working directory from previous branches
+          git rm -rf . 2>/dev/null || true
+          rm -rf * 2>/dev/null || true
+          rm -rf .[^.]* 2>/dev/null || true
 
           mkdir -p reports
           cp /tmp/report.html "reports/report-v${VERSION}.html"
@@ -145,6 +150,10 @@ jobs:
           <!DOCTYPE html>
           <html><head><meta http-equiv="refresh" content="0;url=reports/report-latest.html"></head></html>
           EOF
+
+          # Remove node_modules and other secrets to avoid Github Push Protection errors
+          rm -rf node_modules
+          echo "node_modules" > .gitignore
 
           git add -A
           git commit -m "bench: add report for v${VERSION}" || echo "No changes to commit"
@@ -163,7 +172,7 @@ jobs:
 
           # Replace content between markers using awk
           awk -v snippet="$SNIPPET" '
-            /<!-- BENCH:START -->/ { print; printf "%s\n", snippet; skip=1; next }
+            /<!-- BENCH:START -->/ { print; print snippet; skip=1; next }
             /<!-- BENCH:END -->/ { skip=0 }
             !skip { print }
           ' README.md > README.tmp && mv README.tmp README.md
