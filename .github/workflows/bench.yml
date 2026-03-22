@@ -78,7 +78,7 @@ jobs:
       - name: Install bench dependencies
         working-directory: bench
         run: |
-          pnpm install
+          pnpm install --frozen-lockfile
           INSTALLED=$(node -e "const p = require('./packages/server-bun-native/node_modules/@rvncom/socket-bun-engine/package.json'); console.log(p.version)")
           echo "Installed @rvncom/socket-bun-engine: $INSTALLED"
 
@@ -86,10 +86,15 @@ jobs:
         working-directory: bench
         run: |
           pnpm run bench 2>&1 | tee bench-output.txt
-          grep "^Results-JSON:" bench-output.txt | sed 's/^Results-JSON: //' > results.json
+          grep "Results-JSON:" bench-output.txt | sed 's/.*Results-JSON: //' > results.json
           echo "Results JSON size: $(wc -c < results.json) bytes"
+          if [ ! -s results.json ]; then
+            echo "ERROR: No Results-JSON found in benchmark output"
+            exit 1
+          fi
         env:
           WORKERS: 2
+          SERVER_WORKERS: 1
           CONNECTIONS: 1000
           CLIENTS: 100
           MESSAGES: 500
@@ -134,10 +139,10 @@ jobs:
             git rm -rf . 2>/dev/null || true
           }
           
-          # Force clean working directory from previous branches
+          # Force clean working directory from previous branches (preserve .git)
           git rm -rf . 2>/dev/null || true
           rm -rf * 2>/dev/null || true
-          rm -rf .[^.]* 2>/dev/null || true
+          find . -maxdepth 1 -name '.*' ! -name '.' ! -name '.git' -exec rm -rf {} + 2>/dev/null || true
 
           mkdir -p reports
           cp /tmp/report.html "reports/report-v${VERSION}.html"
