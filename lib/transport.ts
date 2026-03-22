@@ -1,3 +1,5 @@
+/** Abstract base class for polling and websocket transports. */
+
 import { EventEmitter } from "./event-emitter";
 import { type Packet } from "./parser";
 import { type ServerOptions } from "./server";
@@ -101,6 +103,7 @@ export abstract class Transport extends EventEmitter<
   }
 }
 
+/** Error subclass for transport-level failures (e.g. protocol violations, aborted requests). */
 export class TransportError extends Error {
   public readonly type = "TransportError";
 }

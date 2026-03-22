@@ -1,8 +1,13 @@
+/** WebSocket transport — wraps Bun ServerWebSocket with backpressure and fast-path message handling. */
+
 import { Transport } from "../transport";
 import { type Packet, Parser, type RawData } from "../parser";
 import { debuglog } from "node:util";
 
 const debug = debuglog("engine.io:websocket");
+
+/** charCodeAt(0) of "4" — Engine.IO message packet type. */
+const MESSAGE_CHARCODE = 52;
 
 export type WebSocketData = {
   transport: WS;
@@ -110,6 +115,7 @@ export class WS extends Transport {
     this.socket?.close();
   }
 
+  /** Called when Bun WebSocket connection opens. Stores the socket reference and enables writes. */
   public onOpen(socket: BunWebSocket) {
     debug("on open");
     this.socket = socket;
@@ -117,6 +123,7 @@ export class WS extends Transport {
     this._sendCount = 0;
   }
 
+  /** Called on incoming WebSocket message. Handles backpressure resume and fast-path dispatch. */
   public onMessage(message: RawData) {
     debug("on message");
 
@@ -136,7 +143,7 @@ export class WS extends Transport {
     if (
       this._onMessageFast &&
       typeof message === "string" &&
-      message.charCodeAt(0) === 52
+      message.charCodeAt(0) === MESSAGE_CHARCODE
     ) {
       this._onMessageFast(
         message.length > 1 ? message.substring(1) : undefined,
@@ -147,6 +154,7 @@ export class WS extends Transport {
     this.onPacket(Parser.decodePacket(message));
   }
 
+  /** Called when WebSocket connection closes. */
   public onCloseEvent(_code: number, _message: string) {
     debug("on close");
     this.onClose();

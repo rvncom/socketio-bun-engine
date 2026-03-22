@@ -1,3 +1,5 @@
+/** HTTP long-polling transport — manages poll/data request cycle. */
+
 import { Transport } from "../transport";
 import { type Packet, Parser } from "../parser";
 import { debuglog } from "node:util";
@@ -11,14 +13,17 @@ export class Polling extends Transport {
     responseHeaders: Headers;
   };
 
+  /** Transport name identifier. */
   public get name() {
     return "polling";
   }
 
+  /** Transports this can upgrade to. */
   public get upgradesTo(): string[] {
     return ["websocket"];
   }
 
+  /** Dispatches incoming HTTP request to poll or data handler. */
   public onRequest(req: Request, responseHeaders: Headers): Promise<Response> {
     if (req.method === "GET") {
       return this.onPollRequest(req, responseHeaders);
@@ -103,9 +108,7 @@ export class Polling extends Transport {
 
     if (data.length > this.opts.maxHttpBufferSize) {
       this.onError("payload too large");
-      return Promise.resolve(
-        new Response(null, { status: 413, headers: responseHeaders }),
-      );
+      return new Response(null, { status: 413, headers: responseHeaders });
     }
 
     const packets = Parser.decodePayload(data);
@@ -116,14 +119,13 @@ export class Polling extends Transport {
       this.onPacket(packet);
     }
 
-    return Promise.resolve(
-      new Response("ok", {
-        status: 200,
-        headers: responseHeaders,
-      }),
-    );
+    return new Response("ok", {
+      status: 200,
+      headers: responseHeaders,
+    });
   }
 
+  /** Encodes packets and writes as polling response. */
   public send(packets: Packet[]) {
     this.writable = false;
     this.write(Parser.encodePayload(packets));

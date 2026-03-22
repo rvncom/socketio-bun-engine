@@ -1,6 +1,6 @@
 {
   "name": "@rvncom/socket-bun-engine",
-  "version": "1.0.7",
+  "version": "1.0.8",
   "description": "Engine.IO server implementation for Bun runtime",
   "keywords": [
     "socket",

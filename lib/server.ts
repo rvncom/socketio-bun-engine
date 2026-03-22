@@ -1,3 +1,5 @@
+/** Engine.IO server — HTTP routing, WebSocket lifecycle, and client management. */
+
 import { EventEmitter } from "./event-emitter";
 import { Socket } from "./socket";
 import { Polling } from "./transports/polling";

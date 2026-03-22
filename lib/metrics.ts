@@ -24,35 +24,43 @@ export class ServerMetrics {
   private rttSum = 0;
   private rttCount = 0;
 
+  /** Increments the connection counter. */
   onConnection() {
     this.connections++;
   }
 
+  /** Increments the disconnection counter. */
   onDisconnection() {
     this.disconnections++;
   }
 
+  /** Increments the upgrade counter. */
   onUpgrade() {
     this.upgrades++;
   }
 
+  /** Adds to the total bytes received counter. */
   onBytesReceived(bytes: number) {
     this.bytesReceived += bytes;
   }
 
+  /** Adds to the total bytes sent counter. */
   onBytesSent(bytes: number) {
     this.bytesSent += bytes;
   }
 
+  /** Increments the error counter. */
   onError() {
     this.errors++;
   }
 
+  /** Records a round-trip time sample for average calculation. */
   onRtt(rtt: number) {
     this.rttSum += rtt;
     this.rttCount++;
   }
 
+  /** Returns a point-in-time snapshot of all metrics. */
   snapshot(): MetricsSnapshot {
     return {
       connections: this.connections,

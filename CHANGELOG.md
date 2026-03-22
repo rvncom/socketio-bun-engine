@@ -1,5 +1,24 @@
 # Changelog
 
+## 1.0.8
+
+### Code Quality
+
+- **Extract `byteSize()` utility**: Eliminates 4 duplicated data-size calculations in socket.ts
+- **Standardize polling Response returns**: Remove unnecessary `Promise.resolve()` wrapping in async `onDataRequest()`
+- **Named constant `MESSAGE_CHARCODE`**: Replace magic number `52` in WebSocket fast-path
+
+### Documentation
+
+- Add module-level JSDoc to 8 source files
+- Add JSDoc to all exported functions and methods (parser, cors, metrics, transport, polling, websocket, util)
+
+### CI
+
+- Fix `bench.yml`: save `readme-snippet.md` before gh-pages branch switch
+- Fix `bench.yml`: add `SERVER_WORKERS=1` to prevent `EADDRINUSE` on CI
+- Fix `bench.yml`: use `--frozen-lockfile`, validate `results.json`, preserve `.git` on gh-pages
+
 ## 1.0.7
 
 ### Bug Fixes

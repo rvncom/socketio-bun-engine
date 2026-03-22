@@ -1,9 +1,12 @@
+/** Represents a single client connection with transport binding and ping/pong keepalive. */
+
 import { EventEmitter } from "./event-emitter";
 import { type Packet, type PacketType, type RawData } from "./parser";
 import { Transport, TransportError } from "./transport";
 import { WS } from "./transports/websocket";
 import { type ServerOptions } from "./server";
 import { RateLimiter } from "./rate-limiter";
+import { byteSize } from "./util";
 import { debuglog } from "node:util";
 
 const debug = debuglog("engine.io:socket");
@@ -178,10 +181,7 @@ export class Socket extends EventEmitter<
         }
         this.messagesReceived++;
         if (packet.data != null) {
-          this.bytesReceived +=
-            typeof packet.data === "string"
-              ? packet.data.length
-              : (packet.data as Buffer).byteLength;
+          this.bytesReceived += byteSize(packet.data);
         }
         this.emitReserved("data", packet.data!);
         break;
@@ -267,10 +267,7 @@ export class Socket extends EventEmitter<
         }
         this.messagesReceived++;
         if (data != null) {
-          this.bytesReceived +=
-            typeof data === "string"
-              ? data.length
-              : (data as Buffer).byteLength;
+          this.bytesReceived += byteSize(data);
         }
         this.emitReserved("data", data!);
       };
@@ -395,10 +392,7 @@ export class Socket extends EventEmitter<
     ) {
       if (wst.sendMessage(data)) {
         this.messagesSent++;
-        this.bytesSent +=
-          typeof data === "string"
-            ? data.length
-            : (data as Buffer).byteLength;
+        this.bytesSent += byteSize(data);
         return this;
       }
       // sendMessage returned false (e.g. socket closed mid-send) — fall through to buffered path
@@ -424,10 +418,7 @@ export class Socket extends EventEmitter<
     if (type === "message") {
       this.messagesSent++;
       if (data != null) {
-        this.bytesSent +=
-          typeof data === "string"
-            ? data.length
-            : (data as Buffer).byteLength;
+        this.bytesSent += byteSize(data);
       }
     }
 

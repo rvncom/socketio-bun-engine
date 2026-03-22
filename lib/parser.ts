@@ -1,3 +1,5 @@
+/** Engine.IO v4 wire-protocol encoder/decoder. */
+
 const SEPARATOR = String.fromCharCode(30); // see https://en.wikipedia.org/wiki/Delimiter#ASCII_delimited_text
 
 export type PacketType =
@@ -41,6 +43,7 @@ const PACKET_TYPES_REVERSE: Record<string, PacketType> = {
 const ERROR_PACKET: Packet = { type: "error", data: "parser error" };
 
 export const Parser = {
+  /** Encodes a packet to its wire format. Binary data is base64-encoded when supportsBinary is false. */
   encodePacket({ type, data }: Packet, supportsBinary: boolean): RawData {
     if (Buffer.isBuffer(data)) {
       return supportsBinary ? data : "b" + data.toString("base64");
@@ -52,6 +55,7 @@ export const Parser = {
     return PACKET_TYPES[type] + (data || "");
   },
 
+  /** Decodes a wire-format string or Buffer into a Packet. */
   decodePacket(encodedPacket: RawData): Packet {
     if (typeof encodedPacket !== "string") {
       return {
@@ -87,6 +91,7 @@ export const Parser = {
         };
   },
 
+  /** Encodes an array of packets into a single payload string separated by ASCII record separator. */
   encodePayload(packets: Packet[]) {
     const encodedPackets = [];
 
@@ -97,6 +102,7 @@ export const Parser = {
     return encodedPackets.join(SEPARATOR);
   },
 
+  /** Decodes a payload string into an array of packets. Stops on first error packet. */
   decodePayload(encodedPayload: string): Packet[] {
     const encodedPackets = encodedPayload.split(SEPARATOR);
     const packets = [];

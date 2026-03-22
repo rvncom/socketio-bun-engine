@@ -1,3 +1,5 @@
+/** CORS header helpers for cross-origin request handling. */
+
 type OriginOption = boolean | string | RegExp | (string | RegExp)[];
 
 export interface CorsOptions {
@@ -9,6 +11,7 @@ export interface CorsOptions {
   maxAge?: number;
 }
 
+/** Adds CORS response headers based on the request origin and configured options. */
 export function addCorsHeaders(
   headers: Headers,
   opts: CorsOptions,

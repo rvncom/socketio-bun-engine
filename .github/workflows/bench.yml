@@ -129,9 +129,10 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
-          # Save files before branch switch
+          # Save files before branch switch (gh-pages checkout destroys working dir)
           cp "$REPORT" /tmp/report.html
           cp relative-metrics.json /tmp/relative-metrics.json
+          cp readme-snippet.md /tmp/readme-snippet.md
 
           # Create or switch to gh-pages
           git fetch origin gh-pages:gh-pages 2>/dev/null && git checkout gh-pages || {
@@ -168,7 +169,7 @@ jobs:
         working-directory: engine
         run: |
           VERSION="${{ steps.version.outputs.version }}"
-          SNIPPET=$(cat ../bench/readme-snippet.md)
+          SNIPPET=$(cat /tmp/readme-snippet.md)
 
           # Add markers if missing (before ## License)
           if ! grep -q "<!-- BENCH:START -->" README.md; then
