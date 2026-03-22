@@ -78,9 +78,15 @@ jobs:
       - name: Install bench dependencies
         working-directory: bench
         run: |
-          pnpm install --frozen-lockfile
+          VERSION="${{ steps.version.outputs.version }}"
+          pnpm install
+          pnpm update @rvncom/socket-bun-engine@${VERSION}
           INSTALLED=$(node -e "const p = require('./packages/server-bun-native/node_modules/@rvncom/socket-bun-engine/package.json'); console.log(p.version)")
           echo "Installed @rvncom/socket-bun-engine: $INSTALLED"
+          if [ "$INSTALLED" != "$VERSION" ]; then
+            echo "ERROR: Expected $VERSION but got $INSTALLED"
+            exit 1
+          fi
 
       - name: Run benchmarks
         working-directory: bench
@@ -104,7 +110,7 @@ jobs:
         working-directory: bench
         run: |
           VERSION="${{ steps.version.outputs.version }}"
-          REPORT_URL="https://rvncom.github.io/socket-bun-engine-bench/reports/report-v${VERSION}.html"
+          REPORT_URL="https://rvncom.github.io/socket-bun-engine-bench/reports/report-latest.html"
           node scripts/extract-relative.mjs \
             --input results.json \
             --version "$VERSION" \
