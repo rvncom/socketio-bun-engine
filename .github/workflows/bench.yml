@@ -75,7 +75,7 @@ jobs:
           token: ${{ secrets.BENCH_REPO_PAT }}
           fetch-depth: 0
 
-      - name: Install bench dependencies
+      - name: Install and update bench dependencies
         working-directory: bench
         run: |
           VERSION="${{ steps.version.outputs.version }}"
@@ -87,6 +87,15 @@ jobs:
             echo "ERROR: Expected $VERSION but got $INSTALLED"
             exit 1
           fi
+
+          # Commit updated lockfile back to bench repo
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add pnpm-lock.yaml packages/server-bun-native/package.json
+          git diff --cached --quiet || {
+            git commit -m "deps: update @rvncom/socket-bun-engine to ${VERSION}"
+            git push origin HEAD:main
+          }
 
       - name: Run benchmarks
         working-directory: bench
@@ -140,11 +149,13 @@ jobs:
           cp relative-metrics.json /tmp/relative-metrics.json
           cp readme-snippet.md /tmp/readme-snippet.md
 
-          # Create or switch to gh-pages
-          git fetch origin gh-pages:gh-pages 2>/dev/null && git checkout gh-pages || {
+          # Switch to gh-pages (create or reset)
+          if git rev-parse --verify origin/gh-pages >/dev/null 2>&1; then
+            git checkout -B gh-pages origin/gh-pages
+          else
             git checkout --orphan gh-pages
             git rm -rf . 2>/dev/null || true
-          }
+          fi
           
           # Force clean working directory from previous branches (preserve .git)
           git rm -rf . 2>/dev/null || true
