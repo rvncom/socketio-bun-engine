@@ -51,6 +51,8 @@ const FAST_UPGRADE_INTERVAL_MS = 100;
 
 // Pre-encoded ping packet: Parser.encodePacket({ type: "ping" }, true) === "2"
 const ENCODED_PING = "2";
+// Pre-encoded pong packet: Parser.encodePacket({ type: "pong" }, true) === "3"
+const ENCODED_PONG = "3";
 
 export class Socket extends EventEmitter<
   Record<never, never>,
@@ -171,6 +173,15 @@ export class Socket extends EventEmitter<
         this.schedulePing();
 
         this.emitReserved("heartbeat");
+        break;
+
+      case "ping":
+        debug("got ping from client, sending pong");
+        if (this._wsTransport && this._wsTransport.writable) {
+          this._wsTransport.sendRaw(ENCODED_PONG);
+        } else {
+          this.sendPacket("pong");
+        }
         break;
 
       case "message":

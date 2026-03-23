@@ -10,7 +10,7 @@ import {
 } from "./transports/websocket";
 import { addCorsHeaders, type CorsOptions } from "./cors";
 import { Transport } from "./transport";
-import { generateId } from "./util";
+import { generateId, byteSize } from "./util";
 import { Parser, type RawData } from "./parser";
 import { ServerMetrics, type MetricsSnapshot } from "./metrics";
 import { type RateLimitOptions } from "./rate-limiter";
@@ -275,7 +275,11 @@ export class Server extends EventEmitter<
     }
 
     if (this.opts.editResponseHeaders) {
-      await this.opts.editResponseHeaders(responseHeaders, req, server);
+      try {
+        await this.opts.editResponseHeaders(responseHeaders, req, server);
+      } catch (err) {
+        debug("editResponseHeaders threw: %O", err);
+      }
     }
 
     try {
@@ -330,8 +334,10 @@ export class Server extends EventEmitter<
 
     const sid = url.searchParams.get("sid");
     if (sid) {
-      // the client must exist since we have checked it in the verify method
-      const socket = this.clients.get(sid)!;
+      const socket = this.clients.get(sid);
+      if (!socket) {
+        return new Response(null, { status: 400, headers: responseHeaders });
+      }
 
       if (req.headers.has("upgrade")) {
         const transport = new WS(this.opts);
@@ -494,7 +500,11 @@ export class Server extends EventEmitter<
     // Graceful degradation: use cached flag (updated on connect/disconnect)
 
     if (this.opts.editHandshakeHeaders) {
-      await this.opts.editHandshakeHeaders(responseHeaders, req, server);
+      try {
+        await this.opts.editHandshakeHeaders(responseHeaders, req, server);
+      } catch (err) {
+        debug("editHandshakeHeaders threw: %O", err);
+      }
     }
 
     let isUpgrade = req.headers.has("upgrade");
@@ -611,9 +621,12 @@ export class Server extends EventEmitter<
    */
   public broadcast(data: RawData): void {
     const encoded = Parser.encodePacket({ type: "message", data }, true);
+    const size = byteSize(data);
     for (const socket of this.clients.values()) {
       if (socket.transport.name === "websocket") {
         (socket.transport as WS).sendRaw(encoded);
+        socket.messagesSent++;
+        socket.bytesSent += size;
       } else {
         socket.write(data);
       }
@@ -627,10 +640,13 @@ export class Server extends EventEmitter<
    */
   public broadcastExcept(excludeId: string, data: RawData): void {
     const encoded = Parser.encodePacket({ type: "message", data }, true);
+    const size = byteSize(data);
     for (const [id, socket] of this.clients) {
       if (id !== excludeId) {
         if (socket.transport.name === "websocket") {
           (socket.transport as WS).sendRaw(encoded);
+          socket.messagesSent++;
+          socket.bytesSent += size;
         } else {
           socket.write(data);
         }

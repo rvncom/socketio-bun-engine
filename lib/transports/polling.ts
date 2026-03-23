@@ -90,12 +90,12 @@ export class Polling extends Transport {
     });
 
     const contentLength = req.headers.get("content-length");
-    if (
-      contentLength &&
-      parseInt(contentLength, 10) > this.opts.maxHttpBufferSize
-    ) {
-      this.onError("payload too large");
-      return new Response(null, { status: 413, headers: responseHeaders });
+    if (contentLength) {
+      const length = parseInt(contentLength, 10);
+      if (!(length <= this.opts.maxHttpBufferSize)) {
+        this.onError("payload too large");
+        return new Response(null, { status: 413, headers: responseHeaders });
+      }
     }
 
     let data: string;

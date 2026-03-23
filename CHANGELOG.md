@@ -1,5 +1,21 @@
 # Changelog
 
+## 1.0.9
+
+### Security
+
+- **Fix Content-Length NaN bypass**: Malformed Content-Length headers (e.g. "abc") no longer bypass payload size check — `parseInt()` returning NaN now correctly triggers 413 rejection
+
+### Bug Fixes
+
+- **Guard user callback exceptions**: `editHandshakeHeaders` and `editResponseHeaders` callbacks are now wrapped in try-catch — a throwing callback no longer crashes the entire request handler
+- **Guard SID lookup after verify**: Add explicit null check for socket lookup during upgrade/polling, preventing theoretical crash from race between verify and disconnect
+- **Fix broadcast metrics**: `broadcast()` and `broadcastExcept()` now correctly increment per-socket `messagesSent` and `bytesSent` counters for WebSocket transports using `sendRaw()`
+
+### Performance
+
+- **Pre-encode pong packet**: Pong responses on WebSocket connections now send pre-encoded "3" directly, bypassing packet allocation and encoding (mirrors existing ping optimization)
+
 ## 1.0.8
 
 ### Code Quality
