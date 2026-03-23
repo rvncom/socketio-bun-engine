@@ -320,13 +320,13 @@ engine.on("connection", (socket) => {
 ## Benchmarks
 
 <!-- BENCH:START -->
-> Benchmarked on GitHub Actions (`ubuntu-latest`), v1.0.8 vs `@socket.io/bun-engine`. [Full report](https://rvncom.github.io/socket-bun-engine-bench/reports/report-v1.0.8.html).
+> Benchmarked on GitHub Actions (`ubuntu-latest`), v1.0.9 vs `@socket.io/bun-engine`. [Full report](https://rvncom.github.io/socket-bun-engine-bench/reports/report-latest.html).
 
 | Metric | vs upstream | @rvncom | @socket.io |
 |--------|------------|---------|------------|
-| Throughput | **1.1x** faster | 232,558 msg/s | 214,592 msg/s |
-| Connections | **1.1x** faster | 886 conn/s | 776 conn/s |
-| Latency (p95) | **90%** lower | 2.9 ms | 29 ms |
+| Throughput | **1.2x** faster | 230,415 msg/s | 190,114 msg/s |
+| Connections | ~same | 901 conn/s | 899 conn/s |
+| Latency (p95) | **5%** lower | 1.5 ms | 1.6 ms |
 <!-- BENCH:END -->
 
 ## License
