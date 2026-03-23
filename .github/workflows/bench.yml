@@ -80,7 +80,7 @@ jobs:
         run: |
           VERSION="${{ steps.version.outputs.version }}"
           pnpm install
-          pnpm update @rvncom/socket-bun-engine@${VERSION}
+          pnpm --recursive update "@rvncom/socket-bun-engine@${VERSION}"
           INSTALLED=$(node -e "const p = require('./packages/server-bun-native/node_modules/@rvncom/socket-bun-engine/package.json'); console.log(p.version)")
           echo "Installed @rvncom/socket-bun-engine: $INSTALLED"
           if [ "$INSTALLED" != "$VERSION" ]; then
