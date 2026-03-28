@@ -1,5 +1,29 @@
 # Changelog
 
+## 1.1.1
+
+### Bug Fixes
+
+- **Content-Type validation in polling transport**: Added validation for Content-Type header in POST requests — only `text/plain` and `application/octet-stream` are now accepted, invalid types return 400
+- **Null checks in broadcast methods**: `broadcast()` and `broadcastExcept()` now throw TypeError when data is null or undefined, preventing silent failures
+- **Upgrade timeout race condition**: Added readyState check in upgrade timeout callback to prevent attempting to close an already-closed transport
+
+### Testing
+
+- **New test suites**: Added comprehensive tests for transport error handling and backpressure edge cases
+- **Transport error tests**: Added tests for Content-Type validation, including charset parameters and missing headers
+- **Broadcast validation tests**: Added tests for null/undefined data validation in broadcast methods
+- **Backpressure tests**: Added tests for disabled backpressure (threshold=0), rapid message sending, upgrade scenarios, and multiple concurrent sockets
+
+### Tooling
+
+- **Test scripts**: Added `test` and `test:coverage` scripts to package.json for easier testing
+- **Dev script**: Added `dev` script with TypeScript watch mode for development
+
+### Documentation
+
+- **CI badge**: Added GitHub Actions CI status badge to README
+
 ## 1.1.0
 
 ### Package Rename

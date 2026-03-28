@@ -89,6 +89,19 @@ export class Polling extends Transport {
       this.onError("data request aborted");
     });
 
+    const contentType = req.headers.get("content-type");
+    if (contentType) {
+      const baseType = contentType.split(";")[0]?.trim().toLowerCase();
+      if (
+        baseType &&
+        baseType !== "text/plain" &&
+        baseType !== "application/octet-stream"
+      ) {
+        this.onError("invalid content-type");
+        return new Response(null, { status: 400, headers: responseHeaders });
+      }
+    }
+
     const contentLength = req.headers.get("content-length");
     if (contentLength) {
       const length = parseInt(contentLength, 10);

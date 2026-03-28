@@ -620,6 +620,9 @@ export class Server extends EventEmitter<
    * Polling transports fall back to the normal socket.write() path.
    */
   public broadcast(data: RawData): void {
+    if (data == null) {
+      throw new TypeError("broadcast data cannot be null or undefined");
+    }
     const encoded = Parser.encodePacket({ type: "message", data }, true);
     const size = byteSize(data);
     for (const socket of this.clients.values()) {
@@ -639,6 +642,9 @@ export class Server extends EventEmitter<
    * Polling transports fall back to the normal socket.write() path.
    */
   public broadcastExcept(excludeId: string, data: RawData): void {
+    if (data == null) {
+      throw new TypeError("broadcast data cannot be null or undefined");
+    }
     const encoded = Parser.encodePacket({ type: "message", data }, true);
     const size = byteSize(data);
     for (const [id, socket] of this.clients) {

@@ -305,7 +305,12 @@ export class Socket extends EventEmitter<
 
     const timeoutId = setTimeout(() => {
       debug("client did not complete upgrade - closing transport");
-      transport.close();
+      if (
+        transport.writable ||
+        !["closed", "closing"].includes((transport as any).readyState)
+      ) {
+        transport.close();
+      }
     }, this.opts.upgradeTimeout);
 
     let fastUpgradeTimerId: NodeJS.Timeout | undefined;

@@ -1,5 +1,6 @@
 # @rvncom/socketio-bun-engine
 
+[![CI](https://github.com/rvncom/socketio-bun-engine/actions/workflows/ci.yml/badge.svg)](https://github.com/rvncom/socketio-bun-engine/actions/workflows/ci.yml)
 [![npm version](https://img.shields.io/npm/v/@rvncom/socketio-bun-engine?style=flat-square&color=blue&label=version)](https://www.npmjs.com/package/@rvncom/socketio-bun-engine)
 [![npm downloads](https://img.shields.io/npm/dm/@rvncom/socketio-bun-engine.svg)](https://www.npmjs.com/package/@rvncom/socketio-bun-engine)
 [![license](https://img.shields.io/npm/l/@rvncom/socketio-bun-engine?style=flat-square&color=orange)](https://github.com/rvncom/socketio-bun-engine/blob/main/LICENSE)

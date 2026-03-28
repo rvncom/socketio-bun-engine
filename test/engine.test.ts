@@ -632,16 +632,16 @@ describe("Engine.IO protocol", () => {
       });
 
       const server = Bun.serve({
-        port: 3012,
+        port: 3014,
         ...engine.handler(),
       });
 
       try {
         const socket1 = createWebSocket(
-          "ws://localhost:3012/engine.io/?EIO=4&transport=websocket",
+          "ws://localhost:3014/engine.io/?EIO=4&transport=websocket",
         );
         const socket2 = createWebSocket(
-          "ws://localhost:3012/engine.io/?EIO=4&transport=websocket",
+          "ws://localhost:3014/engine.io/?EIO=4&transport=websocket",
         );
 
         await waitFor(socket1, "message"); // handshake

@@ -1,6 +1,6 @@
 {
   "name": "@rvncom/socketio-bun-engine",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "description": "Engine.IO server implementation for Bun runtime",
   "keywords": [
     "socket",
@@ -29,6 +29,9 @@
   },
   "scripts": {
     "compile": "rm -rf ./dist && tsc",
+    "dev": "tsc --watch",
+    "test": "bun test",
+    "test:coverage": "bun test --coverage",
     "lint": "oxlint",
     "format:check": "prettier --check \"lib/**/*.ts\" \"test/**/*.ts\"",
     "format:fix": "prettier --write \"lib/**/*.ts\" \"test/**/*.ts\""
