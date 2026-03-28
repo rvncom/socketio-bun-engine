@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.1.0
+
+### Package Rename
+
+- Renamed package from `@rvncom/socket-bun-engine` -> `@rvncom/socketio-bun-engine`
+- The old package is now deprecated and acts as a proxy to the new package
+
 ## 1.0.9
 
 ### Security

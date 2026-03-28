@@ -1,8 +1,8 @@
-# @rvncom/socket-bun-engine
+# @rvncom/socketio-bun-engine
 
-[![npm version](https://img.shields.io/npm/v/@rvncom/socket-bun-engine?style=flat-square&color=blue&label=version)](https://www.npmjs.com/package/@rvncom/socket-bun-engine)
-[![npm downloads](https://img.shields.io/npm/dm/@rvncom/socket-bun-engine.svg)](https://www.npmjs.com/package/@rvncom/socket-bun-engine)
-[![license](https://img.shields.io/npm/l/@rvncom/socket-bun-engine?style=flat-square&color=orange)](https://github.com/rvncom/socket-bun-engine/blob/main/LICENSE)
+[![npm version](https://img.shields.io/npm/v/@rvncom/socketio-bun-engine?style=flat-square&color=blue&label=version)](https://www.npmjs.com/package/@rvncom/socketio-bun-engine)
+[![npm downloads](https://img.shields.io/npm/dm/@rvncom/socketio-bun-engine.svg)](https://www.npmjs.com/package/@rvncom/socketio-bun-engine)
+[![license](https://img.shields.io/npm/l/@rvncom/socketio-bun-engine?style=flat-square&color=orange)](https://github.com/rvncom/socketio-bun-engine/blob/main/LICENSE)
 
 Engine.IO server implementation for the Bun runtime. Provides native WebSocket and HTTP long-polling transports for [Socket.IO](https://socket.io/).
 
@@ -11,13 +11,13 @@ Fork of `@socket.io/bun-engine` with bug fixes, improved API, and active mainten
 ## Installation
 
 ```bash
-bun add @rvncom/socket-bun-engine
+bun add @rvncom/socketio-bun-engine
 ```
 
 ## Usage
 
 ```ts
-import { Server as Engine } from "@rvncom/socket-bun-engine";
+import { Server as Engine } from "@rvncom/socketio-bun-engine";
 import { Server } from "socket.io";
 
 const engine = new Engine({
@@ -320,7 +320,7 @@ engine.on("connection", (socket) => {
 ## Benchmarks
 
 <!-- BENCH:START -->
-> Benchmarked on GitHub Actions (`ubuntu-latest`), v1.0.9 vs `@socket.io/bun-engine`. [Full report](https://rvncom.github.io/socket-bun-engine-bench/reports/report-latest.html).
+> Benchmarked on GitHub Actions (`ubuntu-latest`), v1.0.9 vs `@socket.io/bun-engine`. [Full report](https://rvncom.github.io/socketio-bun-engine-bench/reports/report-latest.html).
 
 | Metric | vs upstream | @rvncom | @socket.io |
 |--------|------------|---------|------------|

@@ -1,6 +1,6 @@
 {
-  "name": "@rvncom/socket-bun-engine",
-  "version": "1.0.9",
+  "name": "@rvncom/socketio-bun-engine",
+  "version": "1.1.0",
   "description": "Engine.IO server implementation for Bun runtime",
   "keywords": [
     "socket",
@@ -43,9 +43,9 @@
     "typescript": "^5.9.2"
   },
   "license": "MIT",
-  "homepage": "https://github.com/rvncom/socket-bun-engine#readme",
+  "homepage": "https://github.com/rvncom/socketio-bun-engine#readme",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/rvncom/socket-bun-engine.git"
+    "url": "git+https://github.com/rvncom/socketio-bun-engine.git"
   }
 }
