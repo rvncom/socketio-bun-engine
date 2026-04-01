@@ -352,13 +352,13 @@ NODE_DEBUG=engine.io:socket,engine.io:websocket bun run server.ts
 ## Benchmarks
 
 <!-- BENCH:START -->
-> Benchmarked on GitHub Actions (`ubuntu-latest`), v1.1.1 vs `@socket.io/bun-engine`. [Full report](https://rvncom.github.io/socketio-bun-engine-bench/reports/report-latest.html).
+> Benchmarked on GitHub Actions (`ubuntu-latest`), v1.1.2 vs `@socket.io/bun-engine`. [Full report](https://rvncom.github.io/socketio-bun-engine-bench/reports/report-latest.html).
 
-| Metric        | vs upstream     | @rvncom       | @socket.io    |
-| ------------- | --------------- | ------------- | ------------- |
-| Throughput    | **1.2x** faster | 230,415 msg/s | 198,413 msg/s |
-| Connections   | ~same           | 885 conn/s    | 886 conn/s    |
-| Latency (p95) | **7%** higher   | 1.7 ms        | 1.6 ms        |
+| Metric | vs upstream | @rvncom | @socket.io |
+|--------|------------|---------|------------|
+| Throughput | **1.2x** faster | 232,558 msg/s | 195,313 msg/s |
+| Connections | ~same | 885 conn/s | 880 conn/s |
+| Latency (p95) | **9%** lower | 1.7 ms | 1.9 ms |
 <!-- BENCH:END -->
 
 ## License
