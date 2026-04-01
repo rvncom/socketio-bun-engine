@@ -3,11 +3,11 @@ name: Benchmark
 on:
   push:
     tags:
-      - 'v*'
+      - "v*"
   workflow_dispatch:
     inputs:
       skip_npm_wait:
-        description: 'Skip waiting for npm publish (use current npm version)'
+        description: "Skip waiting for npm publish (use current npm version)"
         type: boolean
         default: false
 
@@ -55,16 +55,19 @@ jobs:
         run: |
           VERSION="${{ steps.version.outputs.version }}"
           echo "Waiting for @rvncom/socketio-bun-engine@$VERSION on npm..."
-          for i in $(seq 1 30); do
+          for i in $(seq 1 60); do
             PUBLISHED=$(npm view "@rvncom/socketio-bun-engine@$VERSION" version 2>/dev/null || echo "")
             if [ "$PUBLISHED" = "$VERSION" ]; then
               echo "Found version $VERSION on npm"
+              # Wait additional 30s for npm CDN propagation
+              echo "Waiting 30s for npm CDN propagation..."
+              sleep 30
               exit 0
             fi
-            echo "Attempt $i/30: not yet available, waiting 10s..."
+            echo "Attempt $i/60: not yet available, waiting 10s..."
             sleep 10
           done
-          echo "ERROR: Version $VERSION not found on npm after 5 minutes"
+          echo "ERROR: Version $VERSION not found on npm after 10 minutes"
           exit 1
 
       - name: Checkout bench repo
@@ -80,7 +83,28 @@ jobs:
         run: |
           VERSION="${{ steps.version.outputs.version }}"
           pnpm install
-          pnpm --recursive update "@rvncom/socketio-bun-engine@${VERSION}"
+
+          # Clear pnpm cache for the package to ensure fresh fetch
+          echo "Clearing pnpm cache for @rvncom/socketio-bun-engine..."
+          pnpm store prune || true
+
+          # Retry pnpm update with exponential backoff
+          echo "Updating @rvncom/socketio-bun-engine to $VERSION..."
+          for i in $(seq 1 10); do
+            if pnpm --recursive update "@rvncom/socketio-bun-engine@${VERSION}" 2>&1; then
+              echo "Successfully updated to version $VERSION"
+              break
+            else
+              if [ $i -eq 10 ]; then
+                echo "ERROR: Failed to update after 10 attempts"
+                exit 1
+              fi
+              WAIT=$((i * 5))
+              echo "Attempt $i/10 failed, waiting ${WAIT}s before retry..."
+              sleep $WAIT
+            fi
+          done
+
           INSTALLED=$(node -e "const p = require('./packages/server-bun-native/node_modules/@rvncom/socketio-bun-engine/package.json'); console.log(p.version)")
           echo "Installed @rvncom/socketio-bun-engine: $INSTALLED"
           if [ "$INSTALLED" != "$VERSION" ]; then
@@ -156,7 +180,7 @@ jobs:
             git checkout --orphan gh-pages
             git rm -rf . 2>/dev/null || true
           fi
-          
+
           # Force clean working directory from previous branches (preserve .git)
           git rm -rf . 2>/dev/null || true
           rm -rf * 2>/dev/null || true
