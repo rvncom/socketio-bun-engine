@@ -14,7 +14,12 @@ interface TransportEvents {
   close: () => void;
 }
 
-type ReadyState = "open" | "closing" | "closed";
+export enum ReadyState {
+  OPEN = "open",
+  CLOSING = "closing",
+  CLOSED = "closed",
+  OPENING = "opening",
+}
 
 export abstract class Transport extends EventEmitter<
   Record<never, never>,
@@ -23,12 +28,19 @@ export abstract class Transport extends EventEmitter<
 > {
   public writable = false;
 
-  protected readyState: ReadyState = "open";
+  protected readyState: ReadyState = ReadyState.OPEN;
   protected readonly opts: ServerOptions;
 
   constructor(opts: ServerOptions) {
     super();
     this.opts = opts;
+  }
+
+  /**
+   * Returns the current ready state of the transport.
+   */
+  public getReadyState(): ReadyState {
+    return this.readyState;
   }
 
   /**
@@ -59,12 +71,15 @@ export abstract class Transport extends EventEmitter<
    * Manually closes the transport.
    */
   public close() {
-    if (this.readyState === "closing" || this.readyState === "closed") {
+    if (
+      this.readyState === ReadyState.CLOSING ||
+      this.readyState === ReadyState.CLOSED
+    ) {
       return;
     }
 
     debug("closing transport");
-    this.readyState = "closing";
+    this.readyState = ReadyState.CLOSING;
     this.doClose();
   }
 
@@ -98,7 +113,7 @@ export abstract class Transport extends EventEmitter<
    * @protected
    */
   protected onClose() {
-    this.readyState = "closed";
+    this.readyState = ReadyState.CLOSED;
     this.emitReserved("close");
   }
 }

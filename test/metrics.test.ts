@@ -85,6 +85,8 @@ describe("ServerMetrics", () => {
       bytesSent: 200,
       errors: 1,
       avgRtt: 15,
+      pollingCount: 0,
+      websocketCount: 0,
     });
   });
 
@@ -94,5 +96,39 @@ describe("ServerMetrics", () => {
     m.onRtt(11);
     // (10 + 11) / 2 = 10.5 → rounds to 11
     expect(m.snapshot().avgRtt).toBe(11);
+  });
+
+  it("resets RTT after 1000 samples to prevent unbounded growth", () => {
+    const m = new ServerMetrics();
+    // Add 1000 samples
+    for (let i = 0; i < 1000; i++) {
+      m.onRtt(10);
+    }
+    expect(m.snapshot().avgRtt).toBe(10);
+
+    // Add one more sample - should trigger reset
+    m.onRtt(20);
+    // After reset: rttSum = 10 (avg), rttCount = 1, then add 20
+    // New avg = (10 + 20) / 2 = 15
+    expect(m.snapshot().avgRtt).toBe(15);
+  });
+
+  it("tracks polling transport count", () => {
+    const m = new ServerMetrics();
+    m.onPollingConnection();
+    m.onPollingConnection();
+    expect(m.snapshot().pollingCount).toBe(2);
+    m.onPollingDisconnection();
+    expect(m.snapshot().pollingCount).toBe(1);
+  });
+
+  it("tracks websocket transport count", () => {
+    const m = new ServerMetrics();
+    m.onWebSocketConnection();
+    m.onWebSocketConnection();
+    m.onWebSocketConnection();
+    expect(m.snapshot().websocketCount).toBe(3);
+    m.onWebSocketDisconnection();
+    expect(m.snapshot().websocketCount).toBe(2);
   });
 });

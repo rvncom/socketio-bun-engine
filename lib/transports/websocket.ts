@@ -9,6 +9,12 @@ const debug = debuglog("engine.io:websocket");
 /** charCodeAt(0) of "4" — Engine.IO message packet type. */
 const MESSAGE_CHARCODE = 52;
 
+/** Cache WebSocket.OPEN constant for hot path checks. */
+const WS_OPEN = WebSocket.OPEN;
+
+/** Backpressure check interval — check every 32 sends (amortized). */
+const BACKPRESSURE_CHECK_INTERVAL = 32;
+
 export type WebSocketData = {
   transport: WS;
 };
@@ -46,8 +52,10 @@ export class WS extends Transport {
   private _checkAndApplyBackpressure() {
     if (
       this._checkBackpressure &&
-      (++this._sendCount & 31) === 0 &&
-      this.socket!.getBufferedAmount() > this.opts.backpressureThreshold
+      (++this._sendCount & (BACKPRESSURE_CHECK_INTERVAL - 1)) === 0 &&
+      this.socket &&
+      this.socket.readyState === WS_OPEN &&
+      this.socket.getBufferedAmount() > this.opts.backpressureThreshold
     ) {
       debug("backpressure: buffer full, pausing writes");
       this.writable = false;
@@ -55,11 +63,7 @@ export class WS extends Transport {
   }
 
   public send(packets: Packet[]) {
-    if (
-      !this.writable ||
-      !this.socket ||
-      this.socket.readyState !== WebSocket.OPEN
-    ) {
+    if (!this.writable || !this.socket || this.socket.readyState !== WS_OPEN) {
       return;
     }
 
@@ -78,11 +82,7 @@ export class WS extends Transport {
    * Returns true if sent, false otherwise.
    */
   public sendMessage(data: RawData): boolean {
-    if (
-      !this.writable ||
-      !this.socket ||
-      this.socket.readyState !== WebSocket.OPEN
-    ) {
+    if (!this.writable || !this.socket || this.socket.readyState !== WS_OPEN) {
       return false;
     }
 
@@ -98,11 +98,7 @@ export class WS extends Transport {
    * Used by Server.broadcast() for zero-copy broadcasting.
    */
   public sendRaw(encoded: RawData) {
-    if (
-      !this.writable ||
-      !this.socket ||
-      this.socket.readyState !== WebSocket.OPEN
-    ) {
+    if (!this.writable || !this.socket || this.socket.readyState !== WS_OPEN) {
       return;
     }
 

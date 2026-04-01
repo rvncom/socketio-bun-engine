@@ -1,5 +1,48 @@
 # Changelog
 
+## 1.1.2
+
+### Bug Fixes
+
+- **Type safety in upgrade timeout**: Removed unsafe `as any` cast by adding public `getReadyState()` method to Transport base class
+- **WebSocket null check in backpressure**: Added socket existence and readyState validation before calling `getBufferedAmount()` to prevent race conditions
+- **Option validation**: Added range validation for all numeric options (pingInterval, pingTimeout, upgradeTimeout, maxHttpBufferSize, maxClients, backpressureThreshold, degradationThreshold) — negative values now throw RangeError with clear messages
+- **Content-Length validation**: Fixed bypass vulnerability with leading zeros and malformed headers — now validates that parsed value matches original string
+- **Polling timeout**: Added 60-second timeout for polling requests to prevent indefinite hangs when clients never poll again
+- **Polling promise rejection**: Fixed unused reject callback in polling transport — now properly invoked on timeout
+- **Timer type**: Changed `NodeJS.Timeout` to `Timer` for proper Bun compatibility in upgrade timeout
+
+### Performance
+
+- **Empty broadcast optimization**: Added early return when client list is empty, avoiding unnecessary packet encoding
+- **WebSocket constant caching**: Cached `WebSocket.OPEN` constant to avoid repeated property lookups in hot paths (3 locations)
+- **Magic number extraction**: Extracted backpressure check interval (32) to named constant `BACKPRESSURE_CHECK_INTERVAL`
+
+### New Features
+
+- **RTT metrics with bounded growth**: Added max sample size (1000) to prevent unbounded memory growth — automatically resets to rolling average
+- **Transport distribution metrics**: Added `pollingCount` and `websocketCount` to metrics snapshot for monitoring transport distribution
+- **ReadyState enum**: Replaced magic strings with `ReadyState` enum (`OPEN`, `CLOSING`, `CLOSED`, `OPENING`) for better type safety
+
+### Code Quality
+
+- **Readonly modifiers**: Added `readonly` to immutable fields (`clients`, `_metrics`, `_metricsAttached`) for better type safety
+- **Improved error messages**: Enhanced capacity error messages with actual values (e.g., "Server capacity reached (100/100)")
+
+### API
+
+- **Exported types**: Added `Packet`, `PacketType`, `Transport`, and `ReadyState` to public API exports
+
+### Documentation
+
+- **JSDoc for Socket.write()**: Added comprehensive documentation explaining fast-path optimization and parameters
+- **Debugging section**: Added NODE_DEBUG usage examples to README for enabling debug logs
+- **Requirements section**: Documented Bun >= 1.0.0 and TypeScript >= 5.9.2 requirements
+
+### Developer Experience
+
+- **Bun runtime check**: Added helpful error message when package is used outside Bun runtime
+
 ## 1.1.1
 
 ### Bug Fixes

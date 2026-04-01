@@ -2,7 +2,7 @@
 
 import { EventEmitter } from "./event-emitter";
 import { type Packet, type PacketType, type RawData } from "./parser";
-import { Transport, TransportError } from "./transport";
+import { Transport, TransportError, ReadyState } from "./transport";
 import { WS } from "./transports/websocket";
 import { type ServerOptions } from "./server";
 import { RateLimiter } from "./rate-limiter";
@@ -10,8 +10,6 @@ import { byteSize } from "./util";
 import { debuglog } from "node:util";
 
 const debug = debuglog("engine.io:socket");
-
-type ReadyState = "opening" | "open" | "closing" | "closed";
 
 type UpgradeState = "not_upgraded" | "upgrading" | "upgraded";
 
@@ -60,7 +58,7 @@ export class Socket extends EventEmitter<
   SocketEvents
 > {
   public readonly id: string;
-  public readyState: ReadyState = "opening";
+  public readyState: ReadyState = ReadyState.OPENING;
   public transport: Transport;
   public readonly request: HandshakeRequestReference;
 
@@ -116,7 +114,7 @@ export class Socket extends EventEmitter<
    * @private
    */
   private onOpen() {
-    this.readyState = "open";
+    this.readyState = ReadyState.OPEN;
 
     const upgrades = this.transport.upgradesTo;
     const upgradesStr =
@@ -305,15 +303,13 @@ export class Socket extends EventEmitter<
 
     const timeoutId = setTimeout(() => {
       debug("client did not complete upgrade - closing transport");
-      if (
-        transport.writable ||
-        !["closed", "closing"].includes((transport as any).readyState)
-      ) {
+      const state = transport.getReadyState();
+      if (transport.writable || (state !== "closed" && state !== "closing")) {
         transport.close();
       }
     }, this.opts.upgradeTimeout);
 
-    let fastUpgradeTimerId: NodeJS.Timeout | undefined;
+    let fastUpgradeTimerId: Timer | undefined;
 
     transport.on("close", () => {
       clearTimeout(timeoutId);
@@ -375,12 +371,12 @@ export class Socket extends EventEmitter<
    * @private
    */
   private onClose(reason: CloseReason) {
-    if (this.readyState === "closed") {
+    if (this.readyState === ReadyState.CLOSED) {
       return;
     }
     debug(`socket closed due to ${reason}`);
 
-    this.readyState = "closed";
+    this.readyState = ReadyState.CLOSED;
     clearTimeout(this.pingIntervalTimer);
     clearTimeout(this.pingTimeoutTimer);
     this.rateLimiter?.destroy();
@@ -394,11 +390,21 @@ export class Socket extends EventEmitter<
    *
    * @param data
    */
+  /**
+   * Writes a message packet to the client.
+   * Uses fast-path direct send on WebSocket when possible, bypassing packet allocation
+   * and buffering when the transport is writable and no metrics listeners are attached.
+   *
+   * @param data - The message data to send (string or Buffer)
+   * @returns This socket instance for chaining
+   */
   public write(data: RawData): Socket {
-    if (this.readyState === "closing" || this.readyState === "closed") {
+    if (
+      this.readyState === ReadyState.CLOSING ||
+      this.readyState === ReadyState.CLOSED
+    ) {
       return this;
     }
-    // Fast path: direct send when transport is writable, buffer is empty, and no packetCreate listeners
     const wst = this._wsTransport;
     if (
       wst !== null &&
@@ -411,7 +417,6 @@ export class Socket extends EventEmitter<
         this.bytesSent += byteSize(data);
         return this;
       }
-      // sendMessage returned false (e.g. socket closed mid-send) — fall through to buffered path
     }
     this.sendPacket("message", data);
     return this;
@@ -425,7 +430,10 @@ export class Socket extends EventEmitter<
    * @private
    */
   private sendPacket(type: PacketType, data?: RawData) {
-    if (this.readyState === "closing" || this.readyState === "closed") {
+    if (
+      this.readyState === ReadyState.CLOSING ||
+      this.readyState === ReadyState.CLOSED
+    ) {
       return;
     }
 
@@ -484,11 +492,11 @@ export class Socket extends EventEmitter<
    * Closes the socket and underlying transport.
    */
   public close() {
-    if (this.readyState !== "open") {
+    if (this.readyState !== ReadyState.OPEN) {
       return;
     }
 
-    this.readyState = "closing";
+    this.readyState = ReadyState.CLOSING;
 
     const close = () => {
       this.closeTransport();

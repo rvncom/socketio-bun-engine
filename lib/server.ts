@@ -162,12 +162,12 @@ export class Server extends EventEmitter<
 > {
   public readonly opts: ServerOptions;
 
-  private clients: Map<string, Socket> = new Map();
-  private _metrics = new ServerMetrics();
+  private readonly clients: Map<string, Socket> = new Map();
+  private readonly _metrics = new ServerMetrics();
   private _degraded = false;
   private _draining = false;
   private _metricsEnabled = false;
-  private _metricsAttached = new WeakSet<Socket>();
+  private readonly _metricsAttached = new WeakSet<Socket>();
 
   public get clientsCount(): number {
     return this.clients.size;
@@ -195,6 +195,12 @@ export class Server extends EventEmitter<
   constructor(opts: Partial<ServerOptions> = {}) {
     super();
 
+    if (typeof Bun === "undefined") {
+      throw new Error(
+        "@rvncom/socketio-bun-engine requires the Bun runtime. Please use Bun to run this package.",
+      );
+    }
+
     this.opts = Object.assign(
       {
         path: "/engine.io/",
@@ -208,6 +214,31 @@ export class Server extends EventEmitter<
       },
       opts,
     );
+
+    if (this.opts.pingInterval < 0) {
+      throw new RangeError("pingInterval must be non-negative");
+    }
+    if (this.opts.pingTimeout < 0) {
+      throw new RangeError("pingTimeout must be non-negative");
+    }
+    if (this.opts.upgradeTimeout < 0) {
+      throw new RangeError("upgradeTimeout must be non-negative");
+    }
+    if (this.opts.maxHttpBufferSize < 0) {
+      throw new RangeError("maxHttpBufferSize must be non-negative");
+    }
+    if (this.opts.maxClients < 0) {
+      throw new RangeError("maxClients must be non-negative");
+    }
+    if (this.opts.backpressureThreshold < 0) {
+      throw new RangeError("backpressureThreshold must be non-negative");
+    }
+    if (
+      this.opts.degradationThreshold < 0 ||
+      this.opts.degradationThreshold > 1
+    ) {
+      throw new RangeError("degradationThreshold must be between 0 and 1");
+    }
 
     this._metricsEnabled = this.opts.enableMetrics === true;
   }
@@ -480,16 +511,17 @@ export class Server extends EventEmitter<
       this.emitReserved("connection_error", {
         req,
         code: ERROR_CODES.FORBIDDEN,
-        message: "Server capacity reached",
+        message: `Server capacity reached (${this.clients.size}/${this.opts.maxClients})`,
         context: {
           maxClients: this.opts.maxClients,
+          currentClients: this.clients.size,
         },
       });
       responseHeaders.set("Content-Type", "application/json");
       return new Response(
         JSON.stringify({
           code: ERROR_CODES.FORBIDDEN,
-          message: "Server capacity reached",
+          message: `Server capacity reached (${this.clients.size}/${this.opts.maxClients})`,
         }),
         { status: 503, headers: responseHeaders },
       );
@@ -623,6 +655,7 @@ export class Server extends EventEmitter<
     if (data == null) {
       throw new TypeError("broadcast data cannot be null or undefined");
     }
+    if (this.clients.size === 0) return;
     const encoded = Parser.encodePacket({ type: "message", data }, true);
     const size = byteSize(data);
     for (const socket of this.clients.values()) {
@@ -645,6 +678,7 @@ export class Server extends EventEmitter<
     if (data == null) {
       throw new TypeError("broadcast data cannot be null or undefined");
     }
+    if (this.clients.size === 0) return;
     const encoded = Parser.encodePacket({ type: "message", data }, true);
     const size = byteSize(data);
     for (const [id, socket] of this.clients) {

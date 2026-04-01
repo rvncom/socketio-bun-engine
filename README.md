@@ -48,9 +48,12 @@ Bun.serve({
     const url = new URL(req.url);
 
     if (url.pathname === "/health") {
-      return new Response(JSON.stringify({ status: "ok", connections: engine.clientsCount }), {
-        headers: { "Content-Type": "application/json" },
-      });
+      return new Response(
+        JSON.stringify({ status: "ok", connections: engine.clientsCount }),
+        {
+          headers: { "Content-Type": "application/json" },
+        },
+      );
     }
 
     return engine.handleRequest(req, server);
@@ -111,8 +114,8 @@ Per-socket message rate limiting. Disabled by default.
 ```ts
 const engine = new Engine({
   rateLimit: {
-    maxMessages: 100,   // max messages per window
-    windowMs: 1000,     // window duration in ms
+    maxMessages: 100, // max messages per window
+    windowMs: 1000, // window duration in ms
   },
 });
 
@@ -152,6 +155,7 @@ const engine = new Engine({
 Default: `0` (disabled)
 
 Fraction (0–1) of `maxClients` at which graceful degradation activates. Requires `maxClients > 0`. When active:
+
 - New polling connections are rejected (WebSocket only, returns 503)
 - New connections get doubled `pingInterval` to reduce heartbeat overhead
 
@@ -230,7 +234,9 @@ const snapshot = engine.metrics;
 //   bytesReceived: 524288,
 //   bytesSent: 1048576,
 //   errors: 2,
-//   avgRtt: 14               // average round-trip time (ms)
+//   avgRtt: 14,              // average round-trip time (ms, max 1000 samples)
+//   pollingCount: 8,         // currently connected polling transports
+//   websocketCount: 130      // currently connected websocket transports
 // }
 ```
 
@@ -287,6 +293,7 @@ engine.on("shutdown", () => {
 ```
 
 Options:
+
 - `timeout` (default: `10000`): Maximum time in milliseconds to wait for clients to disconnect before force-closing.
 
 ### `server.draining`
@@ -313,21 +320,45 @@ Timestamp (`Date.now()`) of when the socket was created. Useful for computing se
 engine.on("connection", (socket) => {
   socket.on("close", () => {
     const duration = Date.now() - socket.connectedAt;
-    console.log(`Socket ${socket.id}: ${socket.messagesSent} sent, ${socket.bytesReceived} bytes recv, ${duration}ms`);
+    console.log(
+      `Socket ${socket.id}: ${socket.messagesSent} sent, ${socket.bytesReceived} bytes recv, ${duration}ms`,
+    );
   });
 });
 ```
+
+## Debugging
+
+Enable debug logs with the `NODE_DEBUG` environment variable:
+
+```bash
+# All engine.io logs
+NODE_DEBUG=engine.io bun run server.ts
+
+# Specific subsystems
+NODE_DEBUG=engine.io:socket bun run server.ts      # Socket logs only
+NODE_DEBUG=engine.io:websocket bun run server.ts   # WebSocket logs only
+NODE_DEBUG=engine.io:polling bun run server.ts     # Polling logs only
+
+# Multiple subsystems
+NODE_DEBUG=engine.io:socket,engine.io:websocket bun run server.ts
+```
+
+## Requirements
+
+- Bun >= 1.0.0
+- TypeScript >= 5.9.2 (peer dependency)
 
 ## Benchmarks
 
 <!-- BENCH:START -->
 > Benchmarked on GitHub Actions (`ubuntu-latest`), v1.1.1 vs `@socket.io/bun-engine`. [Full report](https://rvncom.github.io/socketio-bun-engine-bench/reports/report-latest.html).
 
-| Metric | vs upstream | @rvncom | @socket.io |
-|--------|------------|---------|------------|
-| Throughput | **1.2x** faster | 230,415 msg/s | 198,413 msg/s |
-| Connections | ~same | 885 conn/s | 886 conn/s |
-| Latency (p95) | **7%** higher | 1.7 ms | 1.6 ms |
+| Metric        | vs upstream     | @rvncom       | @socket.io    |
+| ------------- | --------------- | ------------- | ------------- |
+| Throughput    | **1.2x** faster | 230,415 msg/s | 198,413 msg/s |
+| Connections   | ~same           | 885 conn/s    | 886 conn/s    |
+| Latency (p95) | **7%** higher   | 1.7 ms        | 1.6 ms        |
 <!-- BENCH:END -->
 
 ## License

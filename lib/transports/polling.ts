@@ -1,6 +1,6 @@
 /** HTTP long-polling transport — manages poll/data request cycle. */
 
-import { Transport } from "../transport";
+import { Transport, ReadyState } from "../transport";
 import { type Packet, Parser } from "../parser";
 import { debuglog } from "node:util";
 
@@ -9,9 +9,11 @@ const debug = debuglog("engine.io:polling");
 export class Polling extends Transport {
   private pollingPromise?: {
     resolve: (res: Response) => void;
-    reject: () => void;
+    reject: (reason?: string) => void;
     responseHeaders: Headers;
+    timeoutId?: Timer;
   };
+  private static readonly POLLING_TIMEOUT = 60000; // 60 seconds
 
   /** Transport name identifier. */
   public get name() {
@@ -57,10 +59,21 @@ export class Polling extends Transport {
     debug("new polling request");
 
     return new Promise<Response>((resolve, reject) => {
-      this.pollingPromise = { resolve, reject, responseHeaders };
+      const timeoutId = setTimeout(() => {
+        if (this.pollingPromise) {
+          debug("polling request timeout");
+          this.pollingPromise = undefined;
+          this.writable = false;
+          this.onError("polling timeout");
+          reject("timeout");
+        }
+      }, Polling.POLLING_TIMEOUT);
+
+      this.pollingPromise = { resolve, reject, responseHeaders, timeoutId };
 
       req.signal.addEventListener("abort", () => {
         if (this.pollingPromise) {
+          clearTimeout(this.pollingPromise.timeoutId);
           this.pollingPromise = undefined;
           this.writable = false;
         }
@@ -105,6 +118,11 @@ export class Polling extends Transport {
     const contentLength = req.headers.get("content-length");
     if (contentLength) {
       const length = parseInt(contentLength, 10);
+      // Check for NaN (malformed header) or leading zeros bypass
+      if (isNaN(length) || length.toString() !== contentLength.trim()) {
+        this.onError("invalid content-length");
+        return new Response(null, { status: 400, headers: responseHeaders });
+      }
       if (!(length <= this.opts.maxHttpBufferSize)) {
         this.onError("payload too large");
         return new Response(null, { status: 413, headers: responseHeaders });
@@ -157,6 +175,8 @@ export class Polling extends Transport {
       return;
     }
 
+    clearTimeout(this.pollingPromise.timeoutId);
+
     const headers = this.pollingPromise.responseHeaders;
     headers.set("Content-Type", "text/plain; charset=UTF-8");
 
@@ -174,7 +194,13 @@ export class Polling extends Transport {
     if (this.writable) {
       debug("transport writable - closing right away");
       // if we have received a "close" packet from the client, then we can just send a "noop" packet back
-      this.send([{ type: this.readyState === "closing" ? "close" : "noop" }]);
+      this.send([
+        { type: this.readyState === ReadyState.CLOSING ? "close" : "noop" },
+      ]);
+    } else if (this.pollingPromise) {
+      // Clear timeout if there's a pending polling request
+      clearTimeout(this.pollingPromise.timeoutId);
+      this.pollingPromise = undefined;
     }
 
     this.onClose();
