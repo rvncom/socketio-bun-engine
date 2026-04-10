@@ -808,6 +808,7 @@ describe("Engine.IO protocol", () => {
       const engine = new Server({
         pingInterval: PING_INTERVAL,
         pingTimeout: PING_TIMEOUT,
+        enableMetrics: true,
       });
 
       const server = Bun.serve({
@@ -863,6 +864,7 @@ describe("Engine.IO protocol", () => {
       const engine = new Server({
         pingInterval: PING_INTERVAL,
         pingTimeout: PING_TIMEOUT,
+        enableMetrics: true,
       });
 
       const server = Bun.serve({
@@ -912,6 +914,7 @@ describe("Engine.IO protocol", () => {
       const engine = new Server({
         pingInterval: PING_INTERVAL,
         pingTimeout: PING_TIMEOUT,
+        enableMetrics: true,
       });
 
       const server = Bun.serve({
