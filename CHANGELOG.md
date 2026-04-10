@@ -24,10 +24,6 @@
 
 - **Exported TransportError**: Added `TransportError` to public API exports for better error handling
 
-### Testing
-
-- **Transport metrics tests**: Added 3 comprehensive tests verifying polling/websocket connection tracking and upgrade metrics
-
 ## 1.1.2
 
 ### Bug Fixes
