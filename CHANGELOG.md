@@ -1,5 +1,33 @@
 # Changelog
 
+## 1.1.3
+
+### Bug Fixes
+
+- **Upgrade timeout race condition**: Fixed logic error where `OR` was used instead of `AND` — now correctly checks that transport is writable AND not closing/closed before attempting to close
+- **Polling cleanup on close**: Added cleanup of pending polling timeout when transport closes to prevent memory leaks
+
+### New Features
+
+- **Transport metrics tracking**: Automatically track `pollingCount` and `websocketCount` in real-time — updates on connection, disconnection, and upgrade events
+- **Configurable polling timeout**: Added `pollingTimeout` option to ServerOptions (default: 60000ms) — allows customization of polling request timeout duration
+- **Health check API**: Added `server.healthCheck()` method returning status, connections, uptime, and metrics — useful for monitoring and load balancer health checks
+
+### Performance
+
+- **Hot path optimizations**: Reduced property access overhead in critical paths:
+  - Cached `readyState` checks in `socket.write()` and `socket.sendPacket()`
+  - Cached `transport` reference in `broadcast()` and `broadcastExcept()`
+  - Cached `clients.size` before loops to avoid repeated Map size lookups
+
+### API
+
+- **Exported TransportError**: Added `TransportError` to public API exports for better error handling
+
+### Testing
+
+- **Transport metrics tests**: Added 3 comprehensive tests verifying polling/websocket connection tracking and upgrade metrics
+
 ## 1.1.2
 
 ### Bug Fixes

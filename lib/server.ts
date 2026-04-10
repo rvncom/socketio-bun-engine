@@ -42,6 +42,11 @@ export interface ServerOptions {
    */
   upgradeTimeout: number;
   /**
+   * Duration in milliseconds before a polling request times out
+   * @default 60000 (60 seconds)
+   */
+  pollingTimeout: number;
+  /**
    * Maximum size in bytes or number of characters a message can be, before closing the session (to avoid DoS).
    * @default 1e6 (1 MB)
    */
@@ -168,6 +173,7 @@ export class Server extends EventEmitter<
   private _draining = false;
   private _metricsEnabled = false;
   private readonly _metricsAttached = new WeakSet<Socket>();
+  private readonly _startTime = Date.now();
 
   public get clientsCount(): number {
     return this.clients.size;
@@ -207,6 +213,7 @@ export class Server extends EventEmitter<
         pingTimeout: 20000,
         pingInterval: 25000,
         upgradeTimeout: 10000,
+        pollingTimeout: 60000,
         maxHttpBufferSize: 1e6,
         maxClients: 0,
         backpressureThreshold: 1_048_576,
@@ -223,6 +230,9 @@ export class Server extends EventEmitter<
     }
     if (this.opts.upgradeTimeout < 0) {
       throw new RangeError("upgradeTimeout must be non-negative");
+    }
+    if (this.opts.pollingTimeout < 0) {
+      throw new RangeError("pollingTimeout must be non-negative");
     }
     if (this.opts.maxHttpBufferSize < 0) {
       throw new RangeError("maxHttpBufferSize must be non-negative");
@@ -278,6 +288,9 @@ export class Server extends EventEmitter<
 
     socket.on("upgrade", () => {
       this._metrics.onUpgrade();
+      // Update transport counts: polling → websocket
+      this._metrics.onPollingDisconnection();
+      this._metrics.onWebSocketConnection();
     });
   }
 
@@ -600,6 +613,14 @@ export class Server extends EventEmitter<
 
     this.clients.set(id, socket);
     this._metrics.onConnection();
+
+    // Track transport type
+    if (transport.name === "polling") {
+      this._metrics.onPollingConnection();
+    } else if (transport.name === "websocket") {
+      this._metrics.onWebSocketConnection();
+    }
+
     this.updateDegradationState();
 
     if (this._metricsEnabled) {
@@ -610,6 +631,14 @@ export class Server extends EventEmitter<
       debug(`socket ${id} closed due to ${reason}`);
       this.clients.delete(id);
       this._metrics.onDisconnection();
+
+      // Track transport type on disconnect
+      if (socket.transport.name === "polling") {
+        this._metrics.onPollingDisconnection();
+      } else if (socket.transport.name === "websocket") {
+        this._metrics.onWebSocketDisconnection();
+      }
+
       this.updateDegradationState();
     });
 
@@ -647,6 +676,24 @@ export class Server extends EventEmitter<
   }
 
   /**
+   * Returns a health check object with server status information.
+   * Useful for monitoring and load balancer health checks.
+   */
+  public healthCheck(): {
+    status: "ok" | "degraded" | "draining";
+    connections: number;
+    uptime: number;
+    metrics: MetricsSnapshot;
+  } {
+    return {
+      status: this._draining ? "draining" : this._degraded ? "degraded" : "ok",
+      connections: this.clients.size,
+      uptime: Date.now() - this._startTime,
+      metrics: this._metrics.snapshot(),
+    };
+  }
+
+  /**
    * Sends a message to all connected sockets.
    * Encodes the packet once and sends the pre-encoded data to WebSocket transports (zero-copy).
    * Polling transports fall back to the normal socket.write() path.
@@ -655,12 +702,16 @@ export class Server extends EventEmitter<
     if (data == null) {
       throw new TypeError("broadcast data cannot be null or undefined");
     }
-    if (this.clients.size === 0) return;
+    const clientsSize = this.clients.size;
+    if (clientsSize === 0) return;
+
     const encoded = Parser.encodePacket({ type: "message", data }, true);
     const size = byteSize(data);
+
     for (const socket of this.clients.values()) {
-      if (socket.transport.name === "websocket") {
-        (socket.transport as WS).sendRaw(encoded);
+      const transport = socket.transport;
+      if (transport.name === "websocket") {
+        (transport as WS).sendRaw(encoded);
         socket.messagesSent++;
         socket.bytesSent += size;
       } else {
@@ -678,13 +729,17 @@ export class Server extends EventEmitter<
     if (data == null) {
       throw new TypeError("broadcast data cannot be null or undefined");
     }
-    if (this.clients.size === 0) return;
+    const clientsSize = this.clients.size;
+    if (clientsSize === 0) return;
+
     const encoded = Parser.encodePacket({ type: "message", data }, true);
     const size = byteSize(data);
+
     for (const [id, socket] of this.clients) {
       if (id !== excludeId) {
-        if (socket.transport.name === "websocket") {
-          (socket.transport as WS).sendRaw(encoded);
+        const transport = socket.transport;
+        if (transport.name === "websocket") {
+          (transport as WS).sendRaw(encoded);
           socket.messagesSent++;
           socket.bytesSent += size;
         } else {

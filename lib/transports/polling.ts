@@ -13,7 +13,6 @@ export class Polling extends Transport {
     responseHeaders: Headers;
     timeoutId?: Timer;
   };
-  private static readonly POLLING_TIMEOUT = 60000; // 60 seconds
 
   /** Transport name identifier. */
   public get name() {
@@ -67,7 +66,7 @@ export class Polling extends Transport {
           this.onError("polling timeout");
           reject("timeout");
         }
-      }, Polling.POLLING_TIMEOUT);
+      }, this.opts.pollingTimeout);
 
       this.pollingPromise = { resolve, reject, responseHeaders, timeoutId };
 

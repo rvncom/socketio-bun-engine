@@ -802,4 +802,170 @@ describe("Engine.IO protocol", () => {
       expect(data).toEqual("4hello");
     });
   });
+
+  describe("transport metrics", () => {
+    it("tracks polling connections", async () => {
+      const engine = new Server({
+        pingInterval: PING_INTERVAL,
+        pingTimeout: PING_TIMEOUT,
+      });
+
+      const server = Bun.serve({
+        port: 3001,
+        fetch(req, server) {
+          return engine.handleRequest(req, server);
+        },
+        websocket: {
+          data: {} as WebSocketData,
+          open(ws: BunWebSocket) {
+            engine.onWebSocketOpen(ws);
+          },
+          message(ws: BunWebSocket, message: RawData) {
+            engine.onWebSocketMessage(ws, message);
+          },
+          close(ws: BunWebSocket, code: number, message: string) {
+            engine.onWebSocketClose(ws, code, message);
+          },
+        },
+      });
+
+      try {
+        const response = await fetch(
+          "http://localhost:3001/engine.io/?EIO=4&transport=polling",
+        );
+        const content = await response.text();
+        const sid = JSON.parse(content.substring(1)).sid;
+
+        const metrics = engine.metrics;
+        expect(metrics.pollingCount).toBe(1);
+        expect(metrics.websocketCount).toBe(0);
+
+        // Close the polling connection
+        await fetch(
+          `http://localhost:3001/engine.io/?EIO=4&transport=polling&sid=${sid}`,
+          {
+            method: "post",
+            body: "1", // close packet
+          },
+        );
+
+        await sleep(100);
+
+        const metricsAfter = engine.metrics;
+        expect(metricsAfter.pollingCount).toBe(0);
+      } finally {
+        await engine.close();
+        server.stop(true);
+      }
+    });
+
+    it("tracks websocket connections", async () => {
+      const engine = new Server({
+        pingInterval: PING_INTERVAL,
+        pingTimeout: PING_TIMEOUT,
+      });
+
+      const server = Bun.serve({
+        port: 3002,
+        fetch(req, server) {
+          return engine.handleRequest(req, server);
+        },
+        websocket: {
+          data: {} as WebSocketData,
+          open(ws: BunWebSocket) {
+            engine.onWebSocketOpen(ws);
+          },
+          message(ws: BunWebSocket, message: RawData) {
+            engine.onWebSocketMessage(ws, message);
+          },
+          close(ws: BunWebSocket, code: number, message: string) {
+            engine.onWebSocketClose(ws, code, message);
+          },
+        },
+      });
+
+      try {
+        const socket = createWebSocket(
+          "ws://localhost:3002/engine.io/?EIO=4&transport=websocket",
+        );
+
+        await waitFor(socket, "message"); // handshake
+
+        const metrics = engine.metrics;
+        expect(metrics.websocketCount).toBe(1);
+        expect(metrics.pollingCount).toBe(0);
+
+        socket.close();
+        await waitFor(socket, "close");
+
+        await sleep(100);
+
+        const metricsAfter = engine.metrics;
+        expect(metricsAfter.websocketCount).toBe(0);
+      } finally {
+        await engine.close();
+        server.stop(true);
+      }
+    });
+
+    it("tracks transport upgrade from polling to websocket", async () => {
+      const engine = new Server({
+        pingInterval: PING_INTERVAL,
+        pingTimeout: PING_TIMEOUT,
+      });
+
+      const server = Bun.serve({
+        port: 3003,
+        fetch(req, server) {
+          return engine.handleRequest(req, server);
+        },
+        websocket: {
+          data: {} as WebSocketData,
+          open(ws: BunWebSocket) {
+            engine.onWebSocketOpen(ws);
+          },
+          message(ws: BunWebSocket, message: RawData) {
+            engine.onWebSocketMessage(ws, message);
+          },
+          close(ws: BunWebSocket, code: number, message: string) {
+            engine.onWebSocketClose(ws, code, message);
+          },
+        },
+      });
+
+      try {
+        const response = await fetch(
+          "http://localhost:3003/engine.io/?EIO=4&transport=polling",
+        );
+        const content = await response.text();
+        const sid = JSON.parse(content.substring(1)).sid;
+
+        const metricsBefore = engine.metrics;
+        expect(metricsBefore.pollingCount).toBe(1);
+        expect(metricsBefore.websocketCount).toBe(0);
+        const upgradesBefore = metricsBefore.upgrades;
+
+        const socket = createWebSocket(
+          `ws://localhost:3003/engine.io/?EIO=4&transport=websocket&sid=${sid}`,
+        );
+
+        await waitFor(socket, "open");
+        socket.send("2probe");
+        await waitFor(socket, "message"); // "3probe"
+        socket.send("5"); // upgrade packet
+
+        await sleep(100);
+
+        const metricsAfter = engine.metrics;
+        expect(metricsAfter.pollingCount).toBe(0);
+        expect(metricsAfter.websocketCount).toBe(1);
+        expect(metricsAfter.upgrades).toBe(upgradesBefore + 1);
+
+        socket.close();
+      } finally {
+        await engine.close();
+        server.stop(true);
+      }
+    });
+  });
 });

@@ -304,7 +304,11 @@ export class Socket extends EventEmitter<
     const timeoutId = setTimeout(() => {
       debug("client did not complete upgrade - closing transport");
       const state = transport.getReadyState();
-      if (transport.writable || (state !== "closed" && state !== "closing")) {
+      if (
+        transport.writable &&
+        state !== ReadyState.CLOSED &&
+        state !== ReadyState.CLOSING
+      ) {
         transport.close();
       }
     }, this.opts.upgradeTimeout);
@@ -399,10 +403,8 @@ export class Socket extends EventEmitter<
    * @returns This socket instance for chaining
    */
   public write(data: RawData): Socket {
-    if (
-      this.readyState === ReadyState.CLOSING ||
-      this.readyState === ReadyState.CLOSED
-    ) {
+    const state = this.readyState;
+    if (state === ReadyState.CLOSING || state === ReadyState.CLOSED) {
       return this;
     }
     const wst = this._wsTransport;
@@ -430,10 +432,8 @@ export class Socket extends EventEmitter<
    * @private
    */
   private sendPacket(type: PacketType, data?: RawData) {
-    if (
-      this.readyState === ReadyState.CLOSING ||
-      this.readyState === ReadyState.CLOSED
-    ) {
+    const state = this.readyState;
+    if (state === ReadyState.CLOSING || state === ReadyState.CLOSED) {
       return;
     }
 
