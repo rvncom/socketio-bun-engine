@@ -1,5 +1,6 @@
 {
   "compilerOptions": {
+    "rootDir": "./lib",
     "outDir": "./dist",
     "declaration": true,
     "lib": ["ESNext"],
@@ -13,6 +14,7 @@
     "verbatimModuleSyntax": true,
     "noEmit": false,
     "strict": true,
+    "types": ["bun"],
     "skipLibCheck": true,
     "noFallthroughCasesInSwitch": true,
     "noUncheckedIndexedAccess": true,
