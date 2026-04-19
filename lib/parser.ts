@@ -93,6 +93,11 @@ export const Parser = {
 
   /** Encodes an array of packets into a single payload string separated by ASCII record separator. */
   encodePayload(packets: Packet[]) {
+    // Fast path: single packet (90%+ of polling responses)
+    if (packets.length === 1) {
+      return this.encodePacket(packets[0]!, false) as string;
+    }
+
     const encodedPackets = [];
 
     for (const packet of packets) {

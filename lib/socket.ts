@@ -149,7 +149,7 @@ export class Socket extends EventEmitter<
    * @private
    */
   private onPacket(packet: Packet) {
-    if (this.readyState !== "open") {
+    if (this.readyState !== ReadyState.OPEN) {
       debug("packet received with closed socket");
       return;
     }
@@ -342,7 +342,10 @@ export class Socket extends EventEmitter<
         );
 
         this.emitReserved("upgrading", transport);
-      } else if (packet.type === "upgrade" && this.readyState !== "closed") {
+      } else if (
+        packet.type === "upgrade" &&
+        this.readyState !== ReadyState.CLOSED
+      ) {
         debug("got upgrade packet - upgrading");
 
         this.upgradeState = "upgraded";
@@ -467,7 +470,7 @@ export class Socket extends EventEmitter<
    */
   private flush() {
     const shouldFlush =
-      this.readyState !== "closed" &&
+      this.readyState !== ReadyState.CLOSED &&
       this.transport.writable &&
       this.writeBuffer.length > 0;
 

@@ -1,5 +1,23 @@
 # Changelog
 
+## 1.1.4
+
+### Bug Fixes
+
+- **ReadyState enum consistency**: Replaced 3 remaining string comparisons (`"open"`, `"closed"`) with `ReadyState.OPEN`/`ReadyState.CLOSED` in `socket.ts` — prevents silent breakage if enum values ever change
+- **Non-null assertion safety**: Replaced `ERROR_MESSAGES.get(code)!` with `?? "Unknown error"` fallback in 2 places in `server.ts` — prevents `undefined` message on unexpected error codes
+
+### Security
+
+- **Handshake rate limiting**: New `maxHandshakesPerSecond` option (default: 0 = disabled) — token-bucket limiter resets every second, excess handshakes receive HTTP 429 with `Retry-After: 1` header. Timer cleaned up on `shutdown()`
+
+### Performance
+
+- **`encodePayload` single-packet fast path**: Single-packet payloads (90%+ of polling responses) skip array creation and `join()` — returns encoded packet directly
+- **`emit()` indexed iteration**: Replaced `for..of` with indexed `for` loop for 3+ listeners path — marginally faster iteration with snapshot correctness preserved
+- **`broadcast` instanceof check**: Replaced `transport.name === "websocket"` string comparison with `transport instanceof WS` in `broadcast()` and `broadcastExcept()` — eliminates getter call and string comparison per socket, removes `as WS` cast
+- **Compact session IDs**: Replaced `crypto.randomUUID()` (36 chars) with `base64url(16 random bytes)` (22 chars) — 39% shorter IDs in every URL query string
+
 ## 1.1.3
 
 ### Bug Fixes

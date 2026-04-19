@@ -206,8 +206,9 @@ abstract class BaseEventEmitter<
       a.apply(this, args);
       b.apply(this, args);
     } else {
-      for (const listener of listeners.slice()) {
-        listener.apply(this, args);
+      const snapshot = listeners.slice();
+      for (let i = 0; i < snapshot.length; i++) {
+        snapshot[i]!.apply(this, args);
       }
     }
 

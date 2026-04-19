@@ -95,11 +95,29 @@ Default: `1e6` (1 MB)
 
 Maximum message size in bytes before closing the session.
 
+### `pollingTimeout`
+
+Default: `60000` (60 seconds)
+
+Milliseconds before a pending polling request times out. If the client doesn't send a new poll within this window, the transport is closed.
+
 ### `maxClients`
 
 Default: `0` (unlimited)
 
 Maximum number of concurrent clients. New connections are rejected with HTTP 503 when the limit is reached.
+
+### `maxHandshakesPerSecond`
+
+Default: `0` (unlimited)
+
+Maximum number of new handshakes allowed per second (global). Excess handshakes receive HTTP 429 with `Retry-After: 1`. Protects against connection flood attacks.
+
+```ts
+const engine = new Engine({
+  maxHandshakesPerSecond: 100, // max 100 new connections/sec
+});
+```
 
 ### `backpressureThreshold`
 

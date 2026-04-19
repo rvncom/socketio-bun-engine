@@ -90,6 +90,12 @@ export interface ServerOptions {
    */
   degradationThreshold: number;
   /**
+   * Maximum number of new handshakes allowed per second (global, not per-IP).
+   * Set to 0 to disable (default). Excess handshakes receive HTTP 429.
+   * @default 0
+   */
+  maxHandshakesPerSecond: number;
+  /**
    * A function that receives a given handshake or upgrade request as its first parameter,
    * and can decide whether to continue or not.
    */
@@ -174,6 +180,8 @@ export class Server extends EventEmitter<
   private _metricsEnabled = false;
   private readonly _metricsAttached = new WeakSet<Socket>();
   private readonly _startTime = Date.now();
+  private _handshakeTokens = 0;
+  private _handshakeTimer?: Timer;
 
   public get clientsCount(): number {
     return this.clients.size;
@@ -218,6 +226,7 @@ export class Server extends EventEmitter<
         maxClients: 0,
         backpressureThreshold: 1_048_576,
         degradationThreshold: 0,
+        maxHandshakesPerSecond: 0,
       },
       opts,
     );
@@ -249,8 +258,18 @@ export class Server extends EventEmitter<
     ) {
       throw new RangeError("degradationThreshold must be between 0 and 1");
     }
+    if (this.opts.maxHandshakesPerSecond < 0) {
+      throw new RangeError("maxHandshakesPerSecond must be non-negative");
+    }
 
     this._metricsEnabled = this.opts.enableMetrics === true;
+
+    if (this.opts.maxHandshakesPerSecond > 0) {
+      this._handshakeTokens = this.opts.maxHandshakesPerSecond;
+      this._handshakeTimer = setInterval(() => {
+        this._handshakeTokens = this.opts.maxHandshakesPerSecond;
+      }, 1000);
+    }
   }
 
   private _attachMetricsListeners(socket: Socket) {
@@ -333,7 +352,7 @@ export class Server extends EventEmitter<
         code: ERROR_CODES;
         context: Record<string, unknown>;
       };
-      const message = ERROR_MESSAGES.get(code)!;
+      const message = ERROR_MESSAGES.get(code) ?? "Unknown error";
       this._metrics.onError();
       this.emitReserved("connection_error", {
         req,
@@ -359,7 +378,7 @@ export class Server extends EventEmitter<
         this.emitReserved("connection_error", {
           req,
           code: ERROR_CODES.FORBIDDEN,
-          message: ERROR_MESSAGES.get(ERROR_CODES.FORBIDDEN)!,
+          message: ERROR_MESSAGES.get(ERROR_CODES.FORBIDDEN) ?? "Forbidden",
           context: {
             message: reason,
           },
@@ -518,6 +537,21 @@ export class Server extends EventEmitter<
         }),
         { status: 503, headers: responseHeaders },
       );
+    }
+
+    if (this.opts.maxHandshakesPerSecond > 0 && this._handshakeTokens <= 0) {
+      this._metrics.onError();
+      responseHeaders.set("Retry-After", "1");
+      return new Response(
+        JSON.stringify({
+          code: ERROR_CODES.FORBIDDEN,
+          message: "Too many connections",
+        }),
+        { status: 429, headers: responseHeaders },
+      );
+    }
+    if (this.opts.maxHandshakesPerSecond > 0) {
+      this._handshakeTokens--;
     }
 
     if (this.opts.maxClients > 0 && this.clients.size >= this.opts.maxClients) {
@@ -710,8 +744,8 @@ export class Server extends EventEmitter<
 
     for (const socket of this.clients.values()) {
       const transport = socket.transport;
-      if (transport.name === "websocket") {
-        (transport as WS).sendRaw(encoded);
+      if (transport instanceof WS) {
+        transport.sendRaw(encoded);
         socket.messagesSent++;
         socket.bytesSent += size;
       } else {
@@ -738,8 +772,8 @@ export class Server extends EventEmitter<
     for (const [id, socket] of this.clients) {
       if (id !== excludeId) {
         const transport = socket.transport;
-        if (transport.name === "websocket") {
-          (transport as WS).sendRaw(encoded);
+        if (transport instanceof WS) {
+          transport.sendRaw(encoded);
           socket.messagesSent++;
           socket.bytesSent += size;
         } else {
@@ -768,6 +802,7 @@ export class Server extends EventEmitter<
    */
   public shutdown(opts?: { timeout?: number }): Promise<void> {
     this._draining = true;
+    clearInterval(this._handshakeTimer);
     const timeout = opts?.timeout ?? 10000;
 
     return new Promise<void>((resolve) => {
